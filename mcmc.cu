@@ -96,9 +96,9 @@ __global__
 void Do_Metropolis_Hastings(singleObj* objects, Room * room, float* weights, int * pickedIdxs, float** resTransAndRot, unsigned int seed){
 	//obj +  temparing + room + weight
 	extern __shared__ singleObj sObjects[];
-	int idx = blockIdx.x * room->objctNum + threadIdx.x;;
-	sObjects[idx] = objects[threadIdx.x];
-	printf("objid: %d", sObjects[idx].id);
+	// int idx = blockIdx.x * room->objctNum + threadIdx.x;;
+	// sObjects[idx] = objects[threadIdx.x];
+	// printf("objid: %d", sObjects[idx].id);
 
 }
 __global__
@@ -176,7 +176,7 @@ automatedLayout::automatedLayout(Room* m_room, vector<float>in_weights) {
 
 void automatedLayout:: generate_suggestions(){
 	setUpDevices();
-	initial_assignment();
+	//initial_assignment();
 	//naiveCUDA();
 	if(room->objctNum == 0)
 		return;
@@ -197,7 +197,7 @@ void automatedLayout:: generate_suggestions(){
 
 	//memory to store result, should be in global mem
 	cudaMallocManaged(&resTransAndRot, nRes * 4 * sizeof(float));
-	cudaMemcpy(resTransAndRot[0], room->get_objs_TransAndRot(), 4 * sizeof(float), cudaMemcpyHostToHost);
+	// cudaMemcpy(resTransAndRot[0], room->get_objs_TransAndRot(), 4 * sizeof(float), cudaMemcpyHostToHost);
 
 	//weight
 	cudaMallocManaged(&deviceWeights, weights.size() * sizeof(float));
@@ -210,7 +210,7 @@ void automatedLayout:: generate_suggestions(){
 	singleObj * objects;
 	objects = (singleObj * )malloc(sizeof(room->objects));
 	std::copy(room->objects.begin(), room->objects.end(), objects);
-	Do_Metropolis_Hastings<<<nBlocks, room->objctNum, sharedMem>>>(objects,deviceRoom,deviceWeights,pickedIdxs, resTransAndRot, time(NULL));
+	// Do_Metropolis_Hastings<<<nBlocks, room->objctNum, sharedMem>>>(objects,deviceRoom,deviceWeights,pickedIdxs, resTransAndRot, time(NULL));
 
 	cudaDeviceSynchronize();
 
@@ -248,20 +248,20 @@ void automatedLayout::setUpDevices(){
     cudaGetDevice(&wgpu);
     cudaDeviceReset();
 }
-void automatedLayout::initial_assignment(){
-	for (int i = 0; i < room->freeObjIds.size(); i++) {
-		singleObj* obj = &room->objects[room->freeObjIds[i]];
-		if (obj->adjoinWall)
-			random_along_wall(room->freeObjIds[i]);
-		else if (obj->alignedTheWall)
-			room->set_obj_zrotation(room->walls[rand() % room->wallNum].zrotation, room->freeObjIds[i]);
-	}
-	room->update_furniture_mask();
-	min_cost = cost_function();
-	if (min_cost == -1)
-		min_cost = INFINITY;
-
-}
+// void automatedLayout::initial_assignment(){
+// 	for (int i = 0; i < room->freeObjIds.size(); i++) {
+// 		singleObj* obj = &room->objects[room->freeObjIds[i]];
+// 		if (obj->adjoinWall)
+// 			random_along_wall(room->freeObjIds[i]);
+// 		else if (obj->alignedTheWall)
+// 			room->set_obj_zrotation(room->walls[rand() % room->wallNum].zrotation, room->freeObjIds[i]);
+// 	}
+// 	room->update_furniture_mask();
+// 	min_cost = cost_function();
+// 	if (min_cost == -1)
+// 		min_cost = INFINITY;
+//
+// }
 // int main(int argc, char** argv){
 //     setUpDevices();
 //     seed = time(NULL);
