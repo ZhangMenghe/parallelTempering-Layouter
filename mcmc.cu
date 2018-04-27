@@ -1,15 +1,18 @@
-#include <iostream>
-#include <assert.h>
 #include <limits.h>
 #include <vector>
 #include <curand.h>
 #include <curand_kernel.h>
 #include <algorithm>
+#include "automatedLayout.h"
+#include "predefinedConstrains.h"
 
 using namespace std;
+using namespace cv;
 
 const unsigned int nBlocks = 10 ;
 const unsigned int WHICH_GPU = 0;
+const unsigned int nTimes =20;
+const unsigned int nRes = 3;
 int seed;
 
 __device__ float density_function(float beta, float cost) {
@@ -37,7 +40,7 @@ __device__ float get_randomNum(unsigned int seed, int maxLimit) {
 
 
 
-__device__ float cost_function(float * data, int length){
+__device__ float cost_function_device(float * data, int length){
     //dummy cost, just sum up all
     float res = 0;
 
@@ -64,12 +67,12 @@ void ActualHW(int randTimes, int numofObjs, unsigned int seed, int* pickedIdAddr
         if(pickedIdAddr[t] == threadIdx.x){
             if(t % 10 == 0)
                 changeTemparature(temparature, seed+index);
-            float cost_pri = cost_function(sArray, numofObjs);
+            float cost_pri = cost_function_device(sArray, numofObjs);
             float p0 = density_function(temparature[blockIdx.x], cost_pri);
             float tmpKeep = sArray[threadIdx.x];
             sArray[threadIdx.x] = get_randomNum(seed+index, 1000);
 
-            float cost_post = cost_function(sArray, numofObjs);
+            float cost_post = cost_function_device(sArray, numofObjs);
             float p = density_function(temparature[blockIdx.x], cost_post);
             float alpha = min(1.0f, p/p0);
             // printf("p/p0: %f\n", p/p0);
@@ -88,6 +91,15 @@ void ActualHW(int randTimes, int numofObjs, unsigned int seed, int* pickedIdAddr
         }
     }
     // return hit;
+}
+__global__
+void Do_Metropolis_Hastings(singleObj* objects, Room * room, float* weights, int * pickedIdxs, float** resTransAndRot, unsigned int seed){
+	//obj +  temparing + room + weight
+	extern __shared__ singleObj sObjects[];
+	int idx = blockIdx.x * room->objctNum + threadIdx.x;;
+	sObjects[idx] = objects[threadIdx.x];
+	printf("objid: %d", sObjects[idx].id);
+
 }
 __global__
 void simpleHW(int numofObjs, float * gValues, float* gArray,unsigned int seed,int*pickedIdxs, int randTimes){
@@ -114,15 +126,14 @@ void simpleHW(int numofObjs, float * gValues, float* gArray,unsigned int seed,in
     __syncthreads();
     gArray[idx] = sArray[idx];
 }
-
-void generate_suggestions(){
-    float *gValues;
+void naiveCUDA(){
+	float *gValues;
     float * gArray;
     int * pickedIdxs;
 
     int numofObjs = 5;
 
-    int nTimes =20000;
+    // int nTimes =20000;
 
     int totalSize = nBlocks*numofObjs* sizeof(float);
 
@@ -154,7 +165,74 @@ void generate_suggestions(){
     cudaFree(gArray);
     cudaFree(pickedIdxs);
 }
-void setUpDevices(){
+
+automatedLayout::automatedLayout(Room* m_room, vector<float>in_weights) {
+	constrains = new layoutConstrains(m_room);
+	room = m_room;
+	min_cost = INFINITY;
+	weights = in_weights;
+}
+
+
+void automatedLayout:: generate_suggestions(){
+	setUpDevices();
+	initial_assignment();
+	//naiveCUDA();
+	if(room->objctNum == 0)
+		return;
+
+    int * pickedIdxs;//should be in global mem
+	float ** resTransAndRot;
+	Room * deviceRoom;
+	float * deviceWeights;
+
+
+	cudaMallocManaged(&deviceRoom, sizeof(*room));
+
+	cudaMemcpy(deviceRoom, room, sizeof(*room), cudaMemcpyHostToHost);
+
+    cudaMallocManaged(&pickedIdxs, nBlocks * nTimes * sizeof(int));
+    for(int i=0; i<nBlocks*nTimes; i++)
+        pickedIdxs[i] = rand()%room->objctNum;
+
+	//memory to store result, should be in global mem
+	cudaMallocManaged(&resTransAndRot, nRes * 4 * sizeof(float));
+	cudaMemcpy(resTransAndRot[0], room->get_objs_TransAndRot(), 4 * sizeof(float), cudaMemcpyHostToHost);
+
+	//weight
+	cudaMallocManaged(&deviceWeights, weights.size() * sizeof(float));
+	for(int i=0;i<weights.size();i++)
+		deviceWeights[i] = weights[i];
+    //dynamic shared mem, <<<nb, nt, sm>>>
+	//obj +  temparing + room + weight
+	// int sharedMem = nBlocks * (sizeof(room->objects)+ 2*sizeof(float)+ sizeof(*room) + sizeof(*deviceWeights));
+	int sharedMem = nBlocks * sizeof(room->objects);
+	singleObj * objects;
+	objects = (singleObj * )malloc(sizeof(room->objects));
+	std::copy(room->objects.begin(), room->objects.end(), objects);
+	Do_Metropolis_Hastings<<<nBlocks, room->objctNum, sharedMem>>>(objects,deviceRoom,deviceWeights,pickedIdxs, resTransAndRot, time(NULL));
+
+	cudaDeviceSynchronize();
+
+	cudaFree(deviceRoom);
+	cudaFree(resTransAndRot);
+	cudaFree(pickedIdxs);
+	cudaFree(deviceWeights);
+	//
+    // for(int i=0;i<nBlocks;i++){
+    //     for(int j=0; j<numofObjs; j++)
+    //         cout<<gArray[i * numofObjs+ j]<<" ";
+    //     cout<<endl;
+    // }
+	//
+}
+void automatedLayout::random_along_wall(int furnitureID){
+
+}
+float automatedLayout::cost_function(){
+	return 0;
+}
+void automatedLayout::setUpDevices(){
     int deviceCount = 0;
     cudaGetDeviceCount(&deviceCount);
     if(WHICH_GPU <= deviceCount) {
@@ -170,7 +248,20 @@ void setUpDevices(){
     cudaGetDevice(&wgpu);
     cudaDeviceReset();
 }
+void automatedLayout::initial_assignment(){
+	for (int i = 0; i < room->freeObjIds.size(); i++) {
+		singleObj* obj = &room->objects[room->freeObjIds[i]];
+		if (obj->adjoinWall)
+			random_along_wall(room->freeObjIds[i]);
+		else if (obj->alignedTheWall)
+			room->set_obj_zrotation(room->walls[rand() % room->wallNum].zrotation, room->freeObjIds[i]);
+	}
+	room->update_furniture_mask();
+	min_cost = cost_function();
+	if (min_cost == -1)
+		min_cost = INFINITY;
 
+}
 // int main(int argc, char** argv){
 //     setUpDevices();
 //     seed = time(NULL);

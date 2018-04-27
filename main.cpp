@@ -140,7 +140,7 @@ int main(int argc, char** argv){
 	// parser_inputfile(existance_file, room, weights);
 	if (room != nullptr && (room->objctNum != 0 || room->wallNum != 0)) {
 		automatedLayout* layout = new automatedLayout(room, weights);
-		// layout->generate_suggestions();
+		layout->generate_suggestions();
 		// layout->display_suggestions();
 	}
 

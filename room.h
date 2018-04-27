@@ -133,13 +133,13 @@ private :
 		obj.isFixed = isFixed;
 		obj.alignedTheWall = (obj.catalogId == TYPE_SHELF || obj.catalogId == TYPE_BED || obj.catalogId == TYPE_TABLE) ? true : false;
 		obj.adjoinWall = (obj.catalogId == TYPE_SHELF || obj.catalogId == TYPE_BED || obj.catalogId == TYPE_TABLE) ? true : false;
-		
+
 		if (isPrevious)
 			cout << "todo-nothing" << endl;
 			//update_obj_boundingBox_by_vertices(obj);
 		else
 			update_obj_boundingBox_and_vertices(obj, 0);
-		
+
 		indepenFurArea += get_single_obj_maskArea(obj.vertices);
 		//obj.nearestWall = find_nearest_wall(obj.translation[0], obj.translation[1]);
 
@@ -305,17 +305,30 @@ public:
 		pairMap[TYPE_SHELF] = shelf;
 	}
 
-	vector<Vec3f> get_objs_transformation() {
-		vector<Vec3f> res;
-		for (int i = 0; i < objctNum; i++)
-			res.push_back( objects[i].translation );
-		return res;
-	}
-
-	vector<float> get_objs_rotation() {
-		vector<float> res;
-		for (int i = 0; i < objctNum; i++)
-			res.push_back(objects[i].zrotation);
+	// vector<Vec3f> get_objs_transformation() {
+	// 	vector<Vec3f> res;
+	// 	for (int i = 0; i < objctNum; i++)
+	// 		res.push_back( objects[i].translation );
+	// 	return res;
+	// }
+	//
+	// vector<float> get_objs_rotation() {
+	// 	vector<float> res;
+	// 	for (int i = 0; i < objctNum; i++)
+	// 		res.push_back(objects[i].zrotation);
+	// 	return res;
+	// }
+	float * get_objs_TransAndRot(){
+		int FloatSize = sizeof(float);
+		int singleItemSize = 4 * FloatSize;
+		float * res = (float *)malloc(objctNum * singleItemSize);
+		for (int i = 0; i < objctNum; i++){
+			int startPos = i*singleItemSize;
+			res[startPos] = objects[i].translation[0];
+			res[startPos +   FloatSize] = objects[i].translation[1];
+			res[startPos + 2*FloatSize] = objects[i].translation[2];
+			res[startPos + 3*FloatSize] = objects[i].zrotation;
+		}
 		return res;
 	}
 	float get_nearest_wall_dist(singleObj * obj) {
