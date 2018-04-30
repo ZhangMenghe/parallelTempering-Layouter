@@ -51,12 +51,13 @@ void parser_inputfile(const char* filename, Room * room, vector<float>& weights)
 		case 'w':
 			room->add_a_wall(parameters[i]);
 			break;
+		case 'f':
+			room->add_an_object(parameters[i]);
+			break;
         }
     }
 
-// 		case 'f':
-// 			room->add_an_object(parameters[i]);
-// 			break;
+
 // 		case 'p':
 // 			room->add_a_focal_point(parameters[i]);
 // 			break;
