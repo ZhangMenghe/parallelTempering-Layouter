@@ -2,29 +2,26 @@
 #include <vector>
 #include <map>
 #include <utility>
-// #include "opencv2/core/core.hpp"
+#include "opencv2/core/core.hpp"
 #include "predefinedConstrains.h"
-#include <thrust/host_vector.h>
-//#include "utils.h"
 using namespace std;
-using namespace thrust;
-// using namespace cv;
-
+using namespace cv;
 #ifndef __ROOM_H__
 #define __ROOM_H__
 
-struct Rect2f{
+struct mRect2f{
 	float x,y;
 	float width,height;
 };
+
 struct singleObj
 {
 	int id;
 	bool isFixed;
 	bool alignedTheWall;
 	bool adjoinWall;
-	Rect2f boundingBox;
-	host_vector<float*> vertices;
+	mRect2f boundingBox;
+	float vertices[4][3];
 	float translation[3];
 	float zrotation;
 	float objWidth, objHeight;
@@ -42,74 +39,95 @@ struct wall
 	float width;
 	float a, b, c;//represent as ax+by+c=0
 	float zheight;
-	host_vector<float*> vertices;
+	float vertices[2][2];
 };
 
 class Room {
-private :
+private:
 	unsigned char ** furnitureMask_initial;
-//
-// 	void initialize_vertices_wall(wall*nw) {
-// 		float half_length = nw->width / 2;
-// 		if (nw->a == 0) {
-// 			nw->vertices.push_back(Vec2f(nw->translation[0] - half_length, nw->translation[1]));
-// 			nw->vertices.push_back(Vec2f(nw->translation[0] + half_length, nw->translation[1]));
-// 		}
-// 		else if (nw->b == 0) {
-// 			nw->vertices.push_back(Vec2f(nw->translation[0], nw->translation[1] - half_length));
-// 			nw->vertices.push_back(Vec2f(nw->translation[0], nw->translation[1] + half_length));
-// 		}
-// 		else {
-// 			float half_len_proj_x = cosf((90 + nw->zrotation)*ANGLE_TO_RAD_F) *half_length;
-// 			float half_len_proj_y = sinf((90 + nw->zrotation)*ANGLE_TO_RAD_F) *half_length;
-// 			nw->vertices.push_back(Vec2f(nw->translation[0] + half_len_proj_x, nw->translation[1] + half_len_proj_y));
-// 			nw->vertices.push_back(Vec2f(nw->translation[0] - half_len_proj_x, nw->translation[1] - half_len_proj_y));
-// 		}
-//
-// 	}
-// 	void setup_wall_equation(Vec3f m_translation, float rot, float & a, float & b, float & c) {
-// 		a = b = c = .0f;
-// 		//x+c=0
-// 		if (remainder(rot, 180) == 0) {
-// 			a = 1;
-// 			c = -m_translation[0];
-// 		}
-// 		else if (remainder(rot, 90) == 0) {
-// 			b = 1;
-// 			c = -m_translation[1];
-// 		}
-// 		else {
-// 			rot = remainder(rot, 180);
-// 			a = tanf((90 + rot)*ANGLE_TO_RAD_F);
-// 			b = -1;
-// 			c = m_translation[1] - a * m_translation[0];
-// 		}
-// 	}
-// 	void init_wall_by_coords(wall *newWall, vector<float> params) {
-// 		float ax = params[0], ay = params[1], bx = params[2], by = params[3];
-// 		newWall->translation = Vec3f((ax + bx) / 2, (ay + by) / 2, 0);
-// 		newWall->width = sqrtf(powf((by - ay), 2) + powf((bx - ax), 2));
-// 		newWall->vertices.push_back(Vec2f(ax, ay)); newWall->vertices.push_back(Vec2f(bx, by));
-// 		if (ax == bx) {
-// 			newWall->zrotation = 0;
-// 			newWall->b = 0; newWall->a = 1; newWall->c = -ax;
-// 		}
-// 		else if (ay == by) {
-// 			newWall->zrotation = 90;
-// 			newWall->a = 0; newWall->b = 1; newWall->c = -ay;
-// 		}
-// 		else {
-// 			newWall->a = (by - ay) / (bx - ax); newWall->b = -1; newWall->c = -(newWall->a*ax - ay);
-// 			newWall->zrotation = atanf(newWall->a)/ CV_PI *180;
-// 		}
-// 	}
-// 	void init_wall_by_length(wall *newWall, vector<float> params) {
-// 		newWall->translation = Vec3f(params[0], params[1], .0f);
-// 		newWall->zrotation = params[2];
-// 		newWall->width = params[3];
-// 		setup_wall_equation(newWall->translation, newWall->zrotation, newWall->a, newWall->b, newWall->c);
-// 		initialize_vertices_wall(newWall);
-// 	}
+	Point card_to_graph_point(float x, float y) {
+		return Point(int(half_width + x), int(half_height - y));
+	}
+	//ax,ay,bx,by
+	void init_a_wall(wall *newWall, vector<float> params) {
+		float ax = params[0], ay = params[1], bx = params[2], by = params[3];
+		newWall->translation[0] = (ax + bx) / 2;newWall->translation[1] = (ay + by) / 2;newWall->translation[2] = 0;
+		newWall->width = sqrtf(powf((by - ay), 2) + powf((bx - ax), 2));
+		for(int i=0;i<2;i++)
+			for(int j=0;j<2;j++)
+				newWall->vertices[i][j] = params[2*i + j];
+		if (ax == bx) {
+			newWall->zrotation = 0;
+			newWall->b = 0; newWall->a = 1; newWall->c = -ax;
+		}
+		else if (ay == by) {
+			newWall->zrotation = 90;
+			newWall->a = 0; newWall->b = 1; newWall->c = -ay;
+		}
+		else {
+			newWall->a = (by - ay) / (bx - ax); newWall->b = -1; newWall->c = -(newWall->a*ax - ay);
+			newWall->zrotation = atanf(newWall->a)/ CV_PI *180;
+		}
+	}
+	void update_mask_by_wall(const wall* wal) {
+		//TODO: DON'T KNOW HOW TO TACKLE WITH OBLIQUE WALL
+	}
+public:
+	bool initialized;
+	float center[3];
+	vector<singleObj> objects;
+	vector<wall> walls;
+	// map<int, vector<int>> objGroupMap;
+	// map<int, vector<pair<int, Vec2f>>> pairMap;
+	// map<int, Vec3f> focalPoint_map;
+	int objctNum;
+	int wallNum;
+	unsigned char ** furnitureMask;
+	float half_width;
+	float half_height;
+	float indepenFurArea;
+	float obstacleArea;
+	float wallArea;
+	float overlappingThreshold;
+	vector<int> freeObjIds;
+	vector<vector<float>> obstacles;
+	Room() {
+		center[0] = center[1] = center[2] =.0f;
+		objctNum = 0;
+		wallNum = 0;
+		indepenFurArea = 0;
+		obstacleArea = 0;
+		initialized = false;
+	}
+
+	void initialize_room(float s_width = 800.0f, float s_height = 600.0f) {
+		initialized = true;
+		half_width = s_width / 2;
+		half_height = s_height / 2;
+		overlappingThreshold = s_width * s_height * 0.005;
+		// set_pairwise_map();
+		int rowCount = int(s_height) + 1;	int colCount = int(s_width)+1;
+		furnitureMask_initial = new unsigned char*[rowCount];
+		for(int i=0; i< rowCount; i++){
+			furnitureMask_initial[i] = new unsigned char[colCount];
+			for(int j=0; j<colCount; j++)
+				furnitureMask_initial[i][j] = 0;
+		}
+		furnitureMask = (unsigned char ** )malloc(sizeof(furnitureMask_initial));
+		memcpy(furnitureMask, furnitureMask_initial, sizeof(furnitureMask_initial));
+	}
+	void add_a_wall(vector<float> params){
+		wall newWall;
+		newWall.id = walls.size();
+		newWall.zheight = params[4];
+		init_a_wall(&newWall, params);
+		walls.push_back(newWall);
+		wallNum++;
+		if (fabs(fmod(newWall.zrotation, 90)) > 0.01)
+			update_mask_by_wall(&newWall);
+	}
+};
+#endif
 // 	float get_single_obj_maskArea(vector<Vec2f> vertices) {
 // 		vector<vector<Point>> contours;
 // 		vector<Point> contour;
@@ -162,20 +180,7 @@ private :
 // 		float test = cv::sum(furnitureMask)[0];
 // 	}
 //
-// 	void update_mask_by_wall(const wall* wal) {
-// 		vector<Point> contour;
-// 		vector<vector<Point>> contours;
-// 		float ax = wal->vertices[0][0], ay = wal->vertices[0][1], bx = wal->vertices[1][0], by = wal->vertices[1][1];
-// 		contour.push_back(card_to_graph_point(ax, ay));
-// 		contour.push_back(card_to_graph_point(bx, by));
-// 		float tx = (fabs(ax) > fabs(bx)) ? ax : bx;
-// 		float ty = (tx == ax) ? by:ay;
-// 		contour.push_back(card_to_graph_point(tx, ty));
-// 		contours.push_back(contour);
-// 		float single_wallArea = cv::sum(furnitureMask_initial)[0];
-// 		drawContours(furnitureMask_initial, contours, 0, 1, FILLED, 8);
-// 		wallArea += cv::sum(furnitureMask_initial)[0]- single_wallArea;
-// 	}
+
 // 	void update_mask_by_object(const singleObj* obj, Mat_<uchar> & target, float movex = -1, float movey=-1) {
 // 		vector<Point> contour;
 // 		vector<vector<Point>> contours;
@@ -194,55 +199,8 @@ private :
 // 			drawContours(target, contours,-1, 1, FILLED, 8);
 // 	}
 
-public:
-	//Rect2f boundingBox;
-	bool initialized;
-	float center[3];
-	host_vector<singleObj> objects;
-	host_vector<wall> walls;
-	// map<int, vector<int>> objGroupMap;
-	// map<int, vector<pair<int, Vec2f>>> pairMap;
-	// map<int, Vec3f> focalPoint_map;
-	int objctNum;
-	int wallNum;
-	unsigned char ** furnitureMask;
-	float half_width;
-	float half_height;
-	float indepenFurArea;
-	float obstacleArea;
-	float wallArea;
-	float overlappingThreshold;
-	host_vector<int> freeObjIds;
-	host_vector<host_vector<float>> obstacles;
-	Room() {
-		center[0] = center[1] = center[2] =.0f;
-		objctNum = 0;
-		wallNum = 0;
-		indepenFurArea = 0;
-		obstacleArea = 0;
-		initialized = false;
-	}
-	void initialize_room(float s_width = 800.0f, float s_height = 600.0f) {
-		initialized = true;
-		half_width = s_width / 2;
-		half_height = s_height / 2;
-		overlappingThreshold = s_width * s_height * 0.005;
-		// set_pairwise_map();
-		int rowCount = int(s_height) + 1;	int colCount = int(s_width)+1;
-		furnitureMask_initial = new unsigned char*[rowCount];
-		for(int i=0; i< rowCount; i++){
-			furnitureMask_initial[i] = new unsigned char[colCount];
-			for(int j=0; j<colCount; j++)
-				furnitureMask_initial[i][j] = 0;
-		}
-		// furnitureMask = (unsigned char ** )malloc(sizeof(furnitureMask_initial));
-		// memcpy(furnitureMask, furnitureMask_initial, rowCount * colCount * sizeof(unsigned char));
-	}
-};
-#endif
-// 	Point card_to_graph_point(float x, float y) {
-// 		return Point(int(half_width + x), int(half_height - y));
-// 	}
+
+
 // 	void rot_around_point(const Vec3f& center, Vec2f& pos, float s, float c) {
 // 		// translate point back to origin:
 // 		pos[0] -= center[0];
@@ -352,20 +310,8 @@ public:
 // 			focalPoint_map[0] = Vec3f(fp[0], fp[1], fp[2]);
 // 	}
 //
-// 	// params: Vec3f m_translation, float rot, float w_width, float w_height) {
-// 	void add_a_wall(vector<float> params){
-// 		wall newWall;
-// 		newWall.id = walls.size();
-// 		newWall.zheight = params[4];
-// 		if (params.size() == 5)
-// 			init_wall_by_length(&newWall, params);
-// 		else
-// 			init_wall_by_coords(&newWall, params);
-// 		walls.push_back(newWall);
-// 		wallNum++;
-// 		if (fabs(fmod(newWall.zrotation, 90)) > 0.01)
-// 			update_mask_by_wall(&newWall);
-// 	}
+
+
 // 	void add_an_object(vector<float> params, bool isPrevious = false, bool isFixed = false) {
 // 		if (params.size() < 15) {
 // 			float hw = params[2] / 2, hh = params[3] / 2;

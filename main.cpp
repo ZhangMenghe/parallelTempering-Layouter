@@ -8,49 +8,52 @@
 using namespace std;
 
 
-// void parser_inputfile(const char* filename, Room * room, vector<float>& weights) {
-// 	ifstream instream(filename);
-// 	string str;
-// 	vector<vector<float>> parameters;
-// 	vector<char> cateType;
-// 	char  delims[] = " :,\t\n";
-// 	char* context = nullptr;
-// 	while (instream && getline(instream, str)) {
-// 		if (!str.length())
-// 			continue;
-// 		char * charline = new char[300];
-// 		int r = strcpy_s(charline, 300, str.c_str());
-// 		char * itemCate = strtok_s(charline,delims,&context);
-// 		vector<float>param;
-// 		char * token = strtok_s(nullptr, delims, &context);
-// 		while (token != nullptr) {
-// 			param.push_back(atof(token));
-// 			token = strtok_s(nullptr, delims, &context);
-// 		}
-// 		parameters.push_back(param);
-// 		cateType.push_back(itemCate[0]);
-// 	}
-// 	instream.close();
-// 	int itemNum = cateType.size();
-// 	vector<vector<float>> fixedObjParams;
-// 	vector<vector<float>> mergedObjParams;
-// 	vector<int> groupedIds;
-// 	int startId = 0;
-// 	if (cateType[0] == 'r') {
-// 		room->initialize_room(parameters[0][0], parameters[0][1]);
-// 		startId = 1;
-// 	}
-// 	else if(!room->initialized)
-// 		room->initialize_room();
-// 	for (int i = startId; i < itemNum; i++) {
-// 		switch (cateType[i])
-// 		{
-// 		case '#':
-// 			break;
-// 		//add a new wall
-// 		case 'w':
-// 			room->add_a_wall(parameters[i]);
-// 			break;
+void parser_inputfile(const char* filename, Room * room, vector<float>& weights) {
+	ifstream instream(filename);
+	string str;
+	vector<vector<float>> parameters;
+	vector<char> cateType;
+	char  delims[] = " :,\t\n";
+	char* context = nullptr;
+	while (instream && getline(instream, str)) {
+		if (!str.length())
+			continue;
+		char * charline = new char[300];
+		int r = strcpy_s(charline, 300, str.c_str());
+		char * itemCate = strtok_s(charline,delims,&context);
+		vector<float>param;
+		char * token = strtok_s(nullptr, delims, &context);
+		while (token != nullptr) {
+			param.push_back(atof(token));
+			token = strtok_s(nullptr, delims, &context);
+		}
+		parameters.push_back(param);
+		cateType.push_back(itemCate[0]);
+	}
+	instream.close();
+	int itemNum = cateType.size();
+	vector<vector<float>> fixedObjParams;
+	vector<vector<float>> mergedObjParams;
+	vector<int> groupedIds;
+	int startId = 0;
+	if (cateType[0] == 'r') {
+		room->initialize_room(parameters[0][0], parameters[0][1]);
+		startId = 1;
+	}
+	else if(!room->initialized)
+		room->initialize_room();
+	for (int i = startId; i < itemNum; i++) {
+		switch (cateType[i])
+		{
+		case '#':
+			break;
+		//add a new wall
+		case 'w':
+			room->add_a_wall(parameters[i]);
+			break;
+        }
+    }
+
 // 		case 'f':
 // 			room->add_an_object(parameters[i]);
 // 			break;
@@ -106,18 +109,12 @@ using namespace std;
 // 		for (int i = 0; i < fixedObjParams.size(); i++)
 // 			room->add_an_object(fixedObjParams[i],true);
 // 	}
-// 	if (weights.size() < 11) {
-// 		for (int i = weights.size(); i < 11; i++)
-// 			weights.push_back(1.0f);
-// 	}
-// 	//TODO:CHECK OUTBOUND
-// 	/*room->add_a_wall(Vec3f(0, 300, 0), 90, 800, 10);
-// 	room->add_a_wall(Vec3f(400, 0, 0), 0, 600, 10);
-// 	room->add_an_object(Vec3f(0, 0, 0), 90, 100, 200, 10, TYPE_CHAIR);
-// 	room->add_an_object(Vec3f(100, 0, 0), 90, 100, 200, 10, TYPE_CHAIR);
-// 	room->add_a_focal_point(Vec3f(0, 300, 0));*/
+	if (weights.size() < 11) {
+		for (int i = weights.size(); i < 11; i++)
+			weights.push_back(1.0f);
+ 	}
 //
-// }
+}
 //
 
 int main(int argc, char** argv){
@@ -136,15 +133,15 @@ int main(int argc, char** argv){
 	r = strcpy_s(existance_file, 100, "E:/fixedObj.txt");
 	Room* room = new Room();
 	vector<float>weights;
-	// parser_inputfile(filename, room, weights);
+	parser_inputfile(filename, room, weights);
 	// parser_inputfile(existance_file, room, weights);
 	room->initialize_room();
-	// if (room != nullptr && (room->objctNum != 0 || room->wallNum != 0)) {
-	// 	cout<<"something"<<endl;
-	// 	automatedLayout* layout = new automatedLayout(room, weights);
+	if (room != nullptr && (room->objctNum != 0 || room->wallNum != 0)) {
+        cout<<"here: "<<room->wallNum<<endl;
+		// automatedLayout* layout = new automatedLayout(room, weights);
 	// 	layout->generate_suggestions();
 	// 	// layout->display_suggestions();
-	// }
+	}
 
 	// system("pause");
 	return 0;
