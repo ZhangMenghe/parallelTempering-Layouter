@@ -116,7 +116,7 @@ public:
 	vector<wall> walls;
 	map<int, vector<int>> objGroupMap;
 	// map<int, vector<pair<int, Vec2f>>> pairMap;
-	// map<int, Vec3f> focalPoint_map;
+	map<int, vector<float>> focalPoint_map;
 	int objctNum;
 	int wallNum;
 	unsigned char ** furnitureMask;
@@ -195,6 +195,13 @@ public:
 		if(params.size()<16)
 			params.push_back(0);
 		init_an_object(params, isFixed, isPrevious);
+	}
+	void add_a_focal_point(vector<float> fp) {
+		vector<float> point = {fp[0], fp[1], fp[2]};
+		if(fp.size()>3)
+			focalPoint_map[fp[3]] = point;
+		else
+			focalPoint_map[0] = point;
 	}
 	void update_mask_by_object(const singleObj* obj, unsigned char ** target, float movex = -1, float movey=-1){
 	}
@@ -360,12 +367,7 @@ public:
 // 		}
 // 		return min_dist;
 // 	}
-// 	void add_a_focal_point(vector<float> fp) {
-// 		if(fp.size()>3)
-// 			focalPoint_map[fp[3]] = Vec3f(fp[0], fp[1], fp[2]);
-// 		else
-// 			focalPoint_map[0] = Vec3f(fp[0], fp[1], fp[2]);
-// 	}
+
 //
 
 

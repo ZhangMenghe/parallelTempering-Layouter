@@ -54,13 +54,23 @@ void parser_inputfile(const char* filename, Room * room, vector<float>& weights)
 		case 'f':
 			room->add_an_object(parameters[i]);
 			break;
+		case 'p':
+			room->add_a_focal_point(parameters[i]);
+			break;
+		case 'v':
+			weights = parameters[i];
+			break;
+        default:
+            break;
         }
     }
+    if (weights.size() < 11) {
+		for (int i = weights.size(); i < 11; i++)
+			weights.push_back(1.0f);
+ 	}
+}
 
 
-// 		case 'p':
-// 			room->add_a_focal_point(parameters[i]);
-// 			break;
 // 		case 'o':
 // 			fixedObjParams.push_back(parameters[i]);
 // 			break;
@@ -69,11 +79,7 @@ void parser_inputfile(const char* filename, Room * room, vector<float>& weights)
 // 			for (int k = 0; k < parameters[i].size(); k++)
 // 				groupedIds.push_back(parameters[i][k]);
 // 			break;
-// 		case 'v':
-// 			weights = parameters[i];
-// 			break;
-// 		default:
-// 			break;
+
 // 		}
 // 	}
 // 	//UNCOMMENT those debug parts to draw un-groupped items
@@ -110,12 +116,7 @@ void parser_inputfile(const char* filename, Room * room, vector<float>& weights)
 // 		for (int i = 0; i < fixedObjParams.size(); i++)
 // 			room->add_an_object(fixedObjParams[i],true);
 // 	}
-	if (weights.size() < 11) {
-		for (int i = weights.size(); i < 11; i++)
-			weights.push_back(1.0f);
- 	}
-//
-}
+
 //
 
 int main(int argc, char** argv){
@@ -138,7 +139,6 @@ int main(int argc, char** argv){
 	// parser_inputfile(existance_file, room, weights);
 	room->initialize_room();
 	if (room != nullptr && (room->objctNum != 0 || room->wallNum != 0)) {
-        cout<<"here: "<<room->wallNum<<endl;
 		// automatedLayout* layout = new automatedLayout(room, weights);
 	// 	layout->generate_suggestions();
 	// 	// layout->display_suggestions();
