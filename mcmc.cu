@@ -17,7 +17,7 @@ const unsigned int nTimes =20;
 void roomInitialization(Room* m_room);
 
 extern __shared__ singleObj sObjs[];
-extern __shared__ float gtemparing[];
+extern __shared__ float sFloats[];
 __device__ __managed__ Room* room;
 
 class automatedLayout
@@ -27,7 +27,7 @@ private:
 	float *weights;
 	int debugParam = 0;
     void random_along_wall(int furnitureID);
-    float cost_function();
+
 
 public:
     // Room * room;
@@ -36,19 +36,8 @@ public:
 	automatedLayout(vector<float>in_weights);
 	void generate_suggestions();
 	void display_suggestions();
-	__device__ void debugDevice(){
-		// printf("id: %d\n", sObjs[0].id);
-		// printf("res:\n", resTransAndRot[0]);
-		// sObjs[0] = room->deviceObjs[1];
-		// debugParam = 2;//room->deviceObjs[1].id;
-	}
-	__device__ void assignId(){
-		printf("%d\n", room->deviceObjs[0].id );
-		// sObjs[0] = room->deviceObjs[0];
-		// sObjs[0].id = 9;
-		// resTransAndRot[0] = 0;
-		// printf("%f", resTransAndRot[0]);
-	}
+	__device__ void initial_assignment();
+	__device__ float cost_function();
 };
 
 int seed;
@@ -154,18 +143,27 @@ void ActualHW(int randTimes, int numofObjs, unsigned int seed, int* pickedIdAddr
     }
     // return hit;
 }
-__global__
-void Do_Metropolis_Hastings(unsigned int seed, float * rArray){
-	gtemparing[blockIdx.x] = blockIdx.x;//-get_randomNum(seed+blockIdx.x, 100) / 10;
-	__syncthreads();
-	rArray[blockIdx.x] = gtemparing[blockIdx.x];
+__device__
+void Metropolis_Hastings(int* pickedIdAddr, float* costList, float* temparature){
+
 }
 __global__
-void AssignFurnitures(int * pickedIdxs, unsigned int seed){
+void Do_Metropolis_Hastings(automatedLayout* al, int * pickedIdxs,unsigned int seed){
+	float* temparature = sFloats;
+	float* costList = (float *) & temparature[nBlocks * sizeof(float)];
+	temparature[blockIdx.x] = -get_randomNum(seed+blockIdx.x, 100) / 10;
+	al->initial_assignment();
+	costList[blockIdx.x] = al->cost_function();
+	int* pickedIdAddr = &pickedIdxs[blockIdx.x * nTimes];
+	Metropolis_Hastings(pickedIdAddr, costList, temparature);
+	__syncthreads();
+
+}
+__global__
+void AssignFurnitures(){
 	int index = blockIdx.x * blockDim.x + threadIdx.x;
 	sObjs[index] = room->deviceObjs[threadIdx.x];
 	__syncthreads();
-	printf("%d\n", sObjs[index].id);
 }
 __global__
 void simpleHW(int numofObjs, float * gValues, float* gArray,unsigned int seed,int*pickedIdxs, int randTimes){
@@ -220,10 +218,10 @@ void naiveCUDA(){
     // Wait for GPU to finish before accessing on host
     cudaDeviceSynchronize();
 
-    for(int i=0;i<nBlocks;i++){
-        for(int j=0; j<numofObjs; j++)
-            cout<<gArray[i * numofObjs+ j]<<" ";
-        cout<<endl;
+    // for(int i=0;i<nBlocks;i++){
+    //     for(int j=0; j<numofObjs; j++)
+    //         cout<<gArray[i * numofObjs+ j]<<" ";
+    //     cout<<endl;
     }
 
     // Free memory
@@ -282,9 +280,9 @@ void automatedLayout:: generate_suggestions(){
 	float * rArray;
 	cudaMallocManaged(&rArray, nBlocks * sizeof(float));
 
-	AssignFurnitures<<<nBlocks, room->objctNum, objMem >>>(pickedIdxs, time(NULL));
+	AssignFurnitures<<<nBlocks, room->objctNum, objMem >>>();
 	cudaDeviceSynchronize();
-	Do_Metropolis_Hastings<<<nBlocks, room->objctNum, temMem>>>(time(NULL), rArray);
+	Do_Metropolis_Hastings<<<nBlocks, room->objctNum, temMem>>>(this, pickedIdxs, time(NULL));
 	cudaDeviceSynchronize();
 
 	cudaFree(resTransAndRot);
@@ -303,11 +301,12 @@ void automatedLayout:: generate_suggestions(){
 void automatedLayout::random_along_wall(int furnitureID){
 
 }
+__device__
 float automatedLayout::cost_function(){
 	return 0;
 }
-
-// void automatedLayout::initial_assignment(){
+__device__
+void automatedLayout::initial_assignment(){}
 // 	for (int i = 0; i < room->freeObjIds.size(); i++) {
 // 		singleObj* obj = &room->objects[room->freeObjIds[i]];
 // 		if (obj->adjoinWall)
