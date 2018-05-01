@@ -44,7 +44,7 @@ struct wall
 
 class Room {
 private:
-	unsigned char ** furnitureMask_initial;
+	unsigned char * furnitureMask_initial;
 	Point card_to_graph_point(float x, float y) {
 		return Point(int(half_width + x), int(half_height - y));
 	}
@@ -99,7 +99,7 @@ private:
 		objects.push_back(obj);
 		objctNum++;
 		if (!isFixed)
-			freeObjIds.push_back(obj.id);
+			freeObjIds[freeObjNum++] = obj.id;
 		else
 			//TODO: NO IDEAS HOW TO UPDATE MASK
 			update_mask_by_object(&obj, furnitureMask_initial);//is a fixed object
@@ -136,28 +136,31 @@ public:
 	vector<singleObj> objects;
 	vector<wall> walls;
 	singleObj * deviceObjs;
-	wall* deviceWalls;
 	map<int, vector<int>> objGroupMap;
 	map<int, vector<pair<int, Vec2f>>> pairMap;
 	map<int, vector<float>> focalPoint_map;
 	int objctNum;
 	int wallNum;
-	unsigned char ** furnitureMask;
+	int freeObjNum;
+	unsigned char * furnitureMask;
 	float half_width;
 	float half_height;
+	int rowCount; int colCount;
 	float indepenFurArea;
 	float obstacleArea;
 	float wallArea;
 	float overlappingThreshold;
-	vector<int> freeObjIds;
+	int freeObjIds[MAX_NUM_OBJS];
 	vector<vector<float>> obstacles;
 	Room() {
 		center[0] = center[1] = center[2] =.0f;
 		objctNum = 0;
+		freeObjNum = 0;
 		wallNum = 0;
 		indepenFurArea = 0;
 		obstacleArea = 0;
 		initialized = false;
+
 	}
 	void RoomCopy(const Room & m_room);
 	void initialize_room(float s_width = 800.0f, float s_height = 600.0f) {
@@ -166,15 +169,13 @@ public:
 		half_height = s_height / 2;
 		overlappingThreshold = s_width * s_height * 0.005;
 		set_pairwise_map();
-		int rowCount = int(s_height) + 1;	int colCount = int(s_width)+1;
-		furnitureMask_initial = new unsigned char*[rowCount];
-		for(int i=0; i< rowCount; i++){
-			furnitureMask_initial[i] = new unsigned char[colCount];
-			for(int j=0; j<colCount; j++)
-				furnitureMask_initial[i][j] = 0;
-		}
-		furnitureMask = (unsigned char ** )malloc(sizeof(furnitureMask_initial));
-		memcpy(furnitureMask, furnitureMask_initial, sizeof(furnitureMask_initial));
+		rowCount = int(s_height) + 1;	colCount = int(s_width)+1;
+		int tMem = rowCount * colCount * sizeof(unsigned char);
+		furnitureMask_initial = (unsigned char *)malloc(tMem);
+		memset(furnitureMask_initial, 0, colCount*rowCount);
+		furnitureMask = (unsigned char* )malloc(tMem);
+		memset(furnitureMask_initial, 0 , colCount*rowCount);
+		// cout<<int(furnitureMask[100])<<"asdfasdf"<<endl;
 	}
 	void add_a_wall(vector<float> params){
 		wall newWall;
@@ -226,7 +227,7 @@ public:
 		else
 			focalPoint_map[0] = point;
 	}
-	void update_mask_by_object(const singleObj* obj, unsigned char ** target, float movex = -1, float movey=-1){
+	void update_mask_by_object(const singleObj* obj, unsigned char * target, float movex = -1, float movey=-1){
 	}
 };
 #endif

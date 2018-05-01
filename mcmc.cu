@@ -110,39 +110,7 @@ void changeTemparature(float * temparature, unsigned int seed){
     temparature[t1] = temparature[t2];
     temparature[t2] = tmp;
 }
-__device__
-void ActualHW(int randTimes, int numofObjs, unsigned int seed, int* pickedIdAddr, float*sArray, float * cost, float *temparature){
-    // bool hit = false;
-    int index = blockIdx.x*blockDim.x + threadIdx.x;
-    for(int t=0; t<randTimes; t++){
-        if(pickedIdAddr[t] == threadIdx.x){
-            if(t % 10 == 0)
-                changeTemparature(temparature, seed+index);
-            float cost_pri = cost_function_device(sArray, numofObjs);
-            float p0 = density_function(temparature[blockIdx.x], cost_pri);
-            float tmpKeep = sArray[threadIdx.x];
-            sArray[threadIdx.x] = get_randomNum(seed+index, 1000);
 
-            float cost_post = cost_function_device(sArray, numofObjs);
-            float p = density_function(temparature[blockIdx.x], cost_post);
-            float alpha = min(1.0f, p/p0);
-            // printf("p/p0: %f\n", p/p0);
-            float t =0.8f;
-            //change back
-            if(alpha>t)
-                sArray[threadIdx.x] = tmpKeep;
-            else{
-                if(sArray[threadIdx.x]>tmpKeep)
-                    printf("%f - %f\n", tmpKeep, sArray[threadIdx.x]);
-                cost[blockIdx.x] = cost_post;
-            }
-
-
-            // hit = true;
-        }
-    }
-    // return hit;
-}
 __device__
 void Metropolis_Hastings(int* pickedIdAddr, float* costList, float* temparature){
 
@@ -165,75 +133,33 @@ void AssignFurnitures(){
 	sObjs[index] = room->deviceObjs[threadIdx.x];
 	__syncthreads();
 }
-__global__
-void simpleHW(int numofObjs, float * gValues, float* gArray,unsigned int seed,int*pickedIdxs, int randTimes){
-    //here should be dynamic shared mem
-    //__shared__ float sArray[30];
-    extern __shared__ float sharedMem[];
-    float * sArray = sharedMem;
-    float * lastSumUp = (float *) & sArray[nBlocks*numofObjs];
-    float * temparature = (float *) & lastSumUp[nBlocks];
-    //initialize
-    int startIdx = blockIdx.x * numofObjs;
-    int idx =  startIdx+ threadIdx.x;
 
-    sArray[idx] = gValues[threadIdx.x];
-    temparature[blockIdx.x] = -get_randomNum(seed+blockIdx.x, 100) / 10;
-    // printf("temp: %f", temparature[blockIdx.x]);
-    lastSumUp[blockIdx.x] = 0;
-    for(int i = 0;i<numofObjs; i++)
-        lastSumUp[blockIdx.x] += gValues[i];
 
-    int* pickedIdAddr = &pickedIdxs[blockIdx.x * randTimes];
-
-    ActualHW(randTimes, numofObjs, seed, pickedIdAddr, &sArray[startIdx], lastSumUp, temparature);
-    __syncthreads();
-    gArray[idx] = sArray[idx];
-}
-void naiveCUDA(){
-	float *gValues;
-    float * gArray;
-    int * pickedIdxs;
-
-    int numofObjs = 5;
-
-    // int nTimes =20000;
-
-    int totalSize = nBlocks*numofObjs* sizeof(float);
-
-    cudaMallocManaged(&gValues, numofObjs * sizeof(float));
-    for(int i=0; i<numofObjs; i++)
-        gValues[i] = 1000;
-    cudaMallocManaged(&pickedIdxs, nBlocks*nTimes * sizeof(int));
-    for(int i=0; i<nBlocks*nTimes; i++)
-        pickedIdxs[i] = rand()%numofObjs;
-    // for(int i=0; i<nBlocks*nTimes; i++)
-    //     cout<<pickedIdxs[i]<<" ";
-    // cout<<endl;
-
-    cudaMallocManaged(&gArray, totalSize);
-    //dynamic shared mem, <<<nb, nt, sm>>>
-    simpleHW<<<nBlocks, numofObjs, totalSize + 2*nBlocks*sizeof(float)>>>(numofObjs, gValues, gArray,time(NULL),pickedIdxs,nTimes);
-
-    // Wait for GPU to finish before accessing on host
-    cudaDeviceSynchronize();
-
-    // for(int i=0;i<nBlocks;i++){
-    //     for(int j=0; j<numofObjs; j++)
-    //         cout<<gArray[i * numofObjs+ j]<<" ";
-    //     cout<<endl;
-    }
-
-    // Free memory
-    cudaFree(gValues);
-    cudaFree(gArray);
-    cudaFree(pickedIdxs);
-}
 void Room::RoomCopy(const Room & m_room){
 	objctNum = m_room.objctNum;
+	freeObjNum = m_room.freeObjNum;
+	half_width = m_room.half_width;
+	half_height = m_room.half_height;
+	indepenFurArea = m_room.indepenFurArea;
+	obstacleArea = m_room.obstacleArea;
+	wallArea = m_room.wallArea;
+	overlappingThreshold = m_room.overlappingThreshold;
+	colCount = m_room.colCount;
+	rowCount = m_room.rowCount;
+	cudaMemcpy(freeObjIds, m_room.freeObjIds, freeObjNum* sizeof(int), cudaMemcpyHostToDevice);
 	cudaMallocManaged(&deviceObjs,  objctNum * sizeof(singleObj));
 	for(int i=0; i<objctNum; i++)
 		deviceObjs[i] = m_room.objects[i];
+
+
+	int tMem = colCount*rowCount * sizeof(unsigned char);
+	cout<<colCount<<"-"<<rowCount<<endl;
+	cudaMallocManaged(&furnitureMask, tMem);
+	cudaMallocManaged(&furnitureMask_initial, tMem);
+	cudaMemcpy(furnitureMask, m_room.furnitureMask, tMem, cudaMemcpyHostToDevice);
+	cudaMemcpy(furnitureMask_initial, m_room.furnitureMask_initial, tMem, cudaMemcpyHostToDevice);
+	//TODO:map..obstacle
+	// cout<<"test- "<<int(furnitureMask[100])<<endl;
 
 }
 void roomInitialization(Room* m_room){
@@ -306,7 +232,9 @@ float automatedLayout::cost_function(){
 	return 0;
 }
 __device__
-void automatedLayout::initial_assignment(){}
+void automatedLayout::initial_assignment(){
+
+}
 // 	for (int i = 0; i < room->freeObjIds.size(); i++) {
 // 		singleObj* obj = &room->objects[room->freeObjIds[i]];
 // 		if (obj->adjoinWall)
