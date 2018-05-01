@@ -1,13 +1,12 @@
 #include <iostream>
 #include <string>
-#include "automatedLayout.h"
 #include "room.h"
 #include "processFixedObjects.h"
 
 // using namespace cv;
 using namespace std;
 
-
+extern void startToProcess(Room * room, vector<float> weights);
 void parser_inputfile(const char* filename, Room * room, vector<float>& weights) {
 	ifstream instream(filename);
 	string str;
@@ -127,7 +126,6 @@ int main(int argc, char** argv){
     }
     else
         filename = argv[1];*/
-
 	char* existance_file;
 	filename = new char[100];
 	existance_file = new char[100];
@@ -138,12 +136,8 @@ int main(int argc, char** argv){
 	parser_inputfile(filename, room, weights);
 	// parser_inputfile(existance_file, room, weights);
 	room->initialize_room();
-	if (room != nullptr && (room->objctNum != 0 || room->wallNum != 0)) {
-		// automatedLayout* layout = new automatedLayout(room, weights);
-	// 	layout->generate_suggestions();
-	// 	// layout->display_suggestions();
-	}
-
+	if (room != nullptr && (room->objctNum != 0 || room->wallNum != 0))
+        startToProcess(room, weights);
 	// system("pause");
 	return 0;
 }

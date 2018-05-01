@@ -3,17 +3,79 @@
 #include <curand.h>
 #include <curand_kernel.h>
 #include <algorithm>
-#include "automatedLayout.h"
+#include "layoutConstrains.h"
+#include "room.h"
 #include "predefinedConstrains.h"
-
+#define RES_NUM 1
 using namespace std;
 using namespace cv;
 
 const unsigned int nBlocks = 10 ;
 const unsigned int WHICH_GPU = 0;
 const unsigned int nTimes =20;
-const unsigned int nRes = 3;
+
+void roomInitialization(Room* m_room);
+
+extern __shared__ singleObj sObjs[];
+extern __shared__ float gtemparing[];
+__device__ __managed__ Room* room;
+
+class automatedLayout
+{
+private:
+	layoutConstrains *constrains;
+	float *weights;
+	int debugParam = 0;
+    void random_along_wall(int furnitureID);
+    float cost_function();
+
+public:
+    // Room * room;
+	float min_cost;
+    float *resTransAndRot;
+	automatedLayout(vector<float>in_weights);
+	void generate_suggestions();
+	void display_suggestions();
+	__device__ void debugDevice(){
+		// printf("id: %d\n", sObjs[0].id);
+		// printf("res:\n", resTransAndRot[0]);
+		// sObjs[0] = room->deviceObjs[1];
+		// debugParam = 2;//room->deviceObjs[1].id;
+	}
+	__device__ void assignId(){
+		printf("%d\n", room->deviceObjs[0].id );
+		// sObjs[0] = room->deviceObjs[0];
+		// sObjs[0].id = 9;
+		// resTransAndRot[0] = 0;
+		// printf("%f", resTransAndRot[0]);
+	}
+};
+
 int seed;
+void setUpDevices(){
+    int deviceCount = 0;
+    cudaGetDeviceCount(&deviceCount);
+    if(WHICH_GPU <= deviceCount) {
+    cudaError_t err = cudaSetDevice(WHICH_GPU);
+    if(err != cudaSuccess)
+        cout<< "CUDA error:" <<cudaGetErrorString(err)<<endl;
+    }
+    else {
+        cout << "Invalid GPU device " << WHICH_GPU << endl;
+        exit(-1);
+    }
+    int wgpu;
+    cudaGetDevice(&wgpu);
+    cudaDeviceReset();
+}
+void startToProcess(Room * m_room, vector<float> weights){
+	//cout<<"hello from mcmc"<<endl;
+	setUpDevices();
+	roomInitialization(m_room);
+	automatedLayout * layout = new automatedLayout(weights);
+	layout->generate_suggestions();
+   // 	// layout->display_suggestions();
+}
 
 __device__ float density_function(float beta, float cost) {
     // printf("%f-%f\n", beta, cost);
@@ -93,13 +155,17 @@ void ActualHW(int randTimes, int numofObjs, unsigned int seed, int* pickedIdAddr
     // return hit;
 }
 __global__
-void Do_Metropolis_Hastings(singleObj* objects, Room * room, float* weights, int * pickedIdxs, float** resTransAndRot, unsigned int seed){
-	//obj +  temparing + room + weight
-	extern __shared__ singleObj sObjects[];
-	// int idx = blockIdx.x * room->objctNum + threadIdx.x;;
-	// sObjects[idx] = objects[threadIdx.x];
-	// printf("objid: %d", sObjects[idx].id);
-
+void Do_Metropolis_Hastings(unsigned int seed, float * rArray){
+	gtemparing[blockIdx.x] = blockIdx.x;//-get_randomNum(seed+blockIdx.x, 100) / 10;
+	__syncthreads();
+	rArray[blockIdx.x] = gtemparing[blockIdx.x];
+}
+__global__
+void AssignFurnitures(int * pickedIdxs, unsigned int seed){
+	int index = blockIdx.x * blockDim.x + threadIdx.x;
+	sObjs[index] = room->deviceObjs[threadIdx.x];
+	__syncthreads();
+	printf("%d\n", sObjs[index].id);
 }
 __global__
 void simpleHW(int numofObjs, float * gValues, float* gArray,unsigned int seed,int*pickedIdxs, int randTimes){
@@ -165,66 +231,74 @@ void naiveCUDA(){
     cudaFree(gArray);
     cudaFree(pickedIdxs);
 }
+void Room::RoomCopy(const Room & m_room){
+	objctNum = m_room.objctNum;
+	cudaMallocManaged(&deviceObjs,  objctNum * sizeof(singleObj));
+	for(int i=0; i<objctNum; i++)
+		deviceObjs[i] = m_room.objects[i];
 
-automatedLayout::automatedLayout(Room* m_room, vector<float>in_weights) {
-	constrains = new layoutConstrains(m_room);
-	room = m_room;
+}
+void roomInitialization(Room* m_room){
+	cudaMallocManaged(&room,  sizeof(Room));
+	room->RoomCopy(*m_room);
+}
+
+automatedLayout::automatedLayout(vector<float>in_weights) {
+
+	// constrains = new layoutConstrains(m_room);
 	min_cost = INFINITY;
-	weights = in_weights;
+
+	// cout<<"shenmemaobing: " <<room->deviceObjs[1].id<<endl;
+	cudaMallocManaged(&weights, in_weights.size() * sizeof(float));
+	for(int i=0;i<in_weights.size();i++)
+		weights[i] = in_weights[i];
+
+	cudaMallocManaged(&resTransAndRot,  4 * sizeof(float));
+	// for(int i=0;i<RES_NUM*4;i++)
+	// 	resTransAndRot[i] = i;
+	// float tmpf[] = {1.0f, 1.5f, 0.5f,1.0f};
+	// cudaMemcpy(resTransAndRot, tmpf, 4*sizeof(float), cudaMemcpyHostToDevice);
 }
 
 
 void automatedLayout:: generate_suggestions(){
-	setUpDevices();
-	//initial_assignment();
-	//naiveCUDA();
 	if(room->objctNum == 0)
 		return;
+    int * pickedIdxs; //should be in global mem
 
-    int * pickedIdxs;//should be in global mem
-	float ** resTransAndRot;
-	Room * deviceRoom;
-	float * deviceWeights;
-
-
-	cudaMallocManaged(&deviceRoom, sizeof(*room));
-
-	cudaMemcpy(deviceRoom, room, sizeof(*room), cudaMemcpyHostToHost);
 
     cudaMallocManaged(&pickedIdxs, nBlocks * nTimes * sizeof(int));
     for(int i=0; i<nBlocks*nTimes; i++)
         pickedIdxs[i] = rand()%room->objctNum;
 
 	//memory to store result, should be in global mem
-	cudaMallocManaged(&resTransAndRot, nRes * 4 * sizeof(float));
-	// cudaMemcpy(resTransAndRot[0], room->get_objs_TransAndRot(), 4 * sizeof(float), cudaMemcpyHostToHost);
 
-	//weight
-	cudaMallocManaged(&deviceWeights, weights.size() * sizeof(float));
-	for(int i=0;i<weights.size();i++)
-		deviceWeights[i] = weights[i];
+
     //dynamic shared mem, <<<nb, nt, sm>>>
 	//obj +  temparing + room + weight
 	// int sharedMem = nBlocks * (sizeof(room->objects)+ 2*sizeof(float)+ sizeof(*room) + sizeof(*deviceWeights));
-	int sharedMem = nBlocks * sizeof(room->objects);
-	singleObj * objects;
-	objects = (singleObj * )malloc(sizeof(room->objects));
-	std::copy(room->objects.begin(), room->objects.end(), objects);
-	// Do_Metropolis_Hastings<<<nBlocks, room->objctNum, sharedMem>>>(objects,deviceRoom,deviceWeights,pickedIdxs, resTransAndRot, time(NULL));
+	int objMem = nBlocks * room->objctNum * sizeof(singleObj);
+	int temMem = nBlocks * sizeof(float);
+	float * rArray;
+	cudaMallocManaged(&rArray, nBlocks * sizeof(float));
 
+	AssignFurnitures<<<nBlocks, room->objctNum, objMem >>>(pickedIdxs, time(NULL));
+	cudaDeviceSynchronize();
+	Do_Metropolis_Hastings<<<nBlocks, room->objctNum, temMem>>>(time(NULL), rArray);
 	cudaDeviceSynchronize();
 
-	cudaFree(deviceRoom);
 	cudaFree(resTransAndRot);
 	cudaFree(pickedIdxs);
-	cudaFree(deviceWeights);
-	//
-    // for(int i=0;i<nBlocks;i++){
-    //     for(int j=0; j<numofObjs; j++)
-    //         cout<<gArray[i * numofObjs+ j]<<" ";
-    //     cout<<endl;
-    // }
-	//
+	cudaFree(weights);
+	cudaFree(room);
+
+
+    for(int i=0;i<nBlocks;i++){
+        // for(int j=0; j<numofObjs; j++)
+            cout<<rArray[i]<<" ";
+        cout<<endl;
+    }
+
 }
 void automatedLayout::random_along_wall(int furnitureID){
 
@@ -232,22 +306,7 @@ void automatedLayout::random_along_wall(int furnitureID){
 float automatedLayout::cost_function(){
 	return 0;
 }
-void automatedLayout::setUpDevices(){
-    int deviceCount = 0;
-    cudaGetDeviceCount(&deviceCount);
-    if(WHICH_GPU <= deviceCount) {
-    cudaError_t err = cudaSetDevice(WHICH_GPU);
-    if(err != cudaSuccess)
-        cout<< "CUDA error:" <<cudaGetErrorString(err)<<endl;
-    }
-    else {
-        cout << "Invalid GPU device " << WHICH_GPU << endl;
-        exit(-1);
-    }
-    int wgpu;
-    cudaGetDevice(&wgpu);
-    cudaDeviceReset();
-}
+
 // void automatedLayout::initial_assignment(){
 // 	for (int i = 0; i < room->freeObjIds.size(); i++) {
 // 		singleObj* obj = &room->objects[room->freeObjIds[i]];

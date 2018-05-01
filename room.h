@@ -104,7 +104,28 @@ private:
 			//TODO: NO IDEAS HOW TO UPDATE MASK
 			update_mask_by_object(&obj, furnitureMask_initial);//is a fixed object
 	}
+	void set_pairwise_map() {
+		vector<pair<int, Vec2f>> chair;
+		// seat to seat
+		chair.push_back(pair <int, Vec2f>(0, Vec2f(0, 50)));
+		//coffee table to seat
+		chair.push_back(pair <int, Vec2f>(1, Vec2f(40, 46)));
+		//seat to end table
+		chair.push_back(pair <int, Vec2f>(3, Vec2f(0, 30)));
 
+		vector<pair<int, Vec2f>> bed;
+		// bed TO nightstand
+		bed.push_back(pair <int, Vec2f>(5, Vec2f(0, 30)));
+		// bed to wall
+		bed.push_back(pair <int, Vec2f>(100, Vec2f(0, 0)));
+
+		vector<pair<int, Vec2f>> shelf;
+		shelf.push_back(pair<int, Vec2f>(100, Vec2f(0, 0)));
+
+		pairMap[TYPE_CHAIR] = chair;
+		pairMap[TYPE_BED] = bed;
+		pairMap[TYPE_SHELF] = shelf;
+	}
 	void update_mask_by_wall(const wall* wal) {
 		//TODO: DON'T KNOW HOW TO TACKLE WITH OBLIQUE WALL
 	}
@@ -114,8 +135,10 @@ public:
 	float center[3];
 	vector<singleObj> objects;
 	vector<wall> walls;
+	singleObj * deviceObjs;
+	wall* deviceWalls;
 	map<int, vector<int>> objGroupMap;
-	// map<int, vector<pair<int, Vec2f>>> pairMap;
+	map<int, vector<pair<int, Vec2f>>> pairMap;
 	map<int, vector<float>> focalPoint_map;
 	int objctNum;
 	int wallNum;
@@ -136,13 +159,13 @@ public:
 		obstacleArea = 0;
 		initialized = false;
 	}
-
+	void RoomCopy(const Room & m_room);
 	void initialize_room(float s_width = 800.0f, float s_height = 600.0f) {
 		initialized = true;
 		half_width = s_width / 2;
 		half_height = s_height / 2;
 		overlappingThreshold = s_width * s_height * 0.005;
-		// set_pairwise_map();
+		set_pairwise_map();
 		int rowCount = int(s_height) + 1;	int colCount = int(s_width)+1;
 		furnitureMask_initial = new unsigned char*[rowCount];
 		for(int i=0; i< rowCount; i++){
@@ -319,28 +342,7 @@ public:
 // 			objects[i].zrotation = rotation[i];
 // 	}
 //
-// 	void set_pairwise_map() {
-// 		vector<pair<int, Vec2f>> chair;
-// 		// seat to seat
-// 		chair.push_back(pair <int, Vec2f>(0, Vec2f(0, 50)));
-// 		//coffee table to seat
-// 		chair.push_back(pair <int, Vec2f>(1, Vec2f(40, 46)));
-// 		//seat to end table
-// 		chair.push_back(pair <int, Vec2f>(3, Vec2f(0, 30)));
-//
-// 		vector<pair<int, Vec2f>> bed;
-// 		// bed TO nightstand
-// 		bed.push_back(pair <int, Vec2f>(5, Vec2f(0, 30)));
-// 		// bed to wall
-// 		bed.push_back(pair <int, Vec2f>(100, Vec2f(0, 0)));
-//
-// 		vector<pair<int, Vec2f>> shelf;
-// 		shelf.push_back(pair<int, Vec2f>(100, Vec2f(0, 0)));
-//
-// 		pairMap[TYPE_CHAIR] = chair;
-// 		pairMap[TYPE_BED] = bed;
-// 		pairMap[TYPE_SHELF] = shelf;
-// 	}
+
 // 	float * get_objs_TransAndRot(){
 // 		int FloatSize = sizeof(float);
 // 		int singleItemSize = 4 * FloatSize;
