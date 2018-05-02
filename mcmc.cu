@@ -5,23 +5,24 @@
 #include <curand.h>
 #include <curand_kernel.h>
 #include <algorithm>
-#include "mcmc.cuh"
-
+// #include "predefinedConstrains.h"
+#include "room.cuh"
 #define RES_NUM 1
 
 using namespace std;
-using namespace cv;
+// using namespace cv;
 
 const unsigned int nBlocks = 10 ;
 const unsigned int WHICH_GPU = 0;
 const unsigned int nTimes =20;
 
 void roomInitialization(Room* m_room);
-void generate_suggestions(automatedLayout * layout);
+void generate_suggestions();
 extern __shared__ singleObj sObjs[];
 extern __shared__ float sFloats[];
 __device__ __managed__ Room* room;
-
+__device__ __managed__ float weights[11]={1.0f};
+__device__ __managed__ float resTransAndRot[RES_NUM * 4];
 
 void setUpDevices(){
     int deviceCount = 0;
@@ -40,27 +41,30 @@ void setUpDevices(){
     cudaDeviceReset();
 }
 void debugCaller(){
-    // room->set_obj_zrotation(&room->deviceObjs[0], PI);
-    // room->set_obj_translation(&room->deviceObjs[0], -50, 0);
+    room->set_obj_zrotation(&room->deviceObjs[0], PI);
+    room->set_obj_translation(&room->deviceObjs[0], -50, 0);
     // room->get_nearest_wall_dist(&room->deviceObjs[0]);
 }
-void startToProcess(Room * m_room, vector<float> weights){
+void startToProcess(Room * m_room){
 	//cout<<"hello from mcmc"<<endl;
 	setUpDevices();
 	roomInitialization(m_room);
-	automatedLayout * layout = new automatedLayout(weights);
+
 	// layout->initial_assignment(m_room);
     debugCaller();
-	generate_suggestions(layout);
+	generate_suggestions();
    // 	// layout->display_suggestions();
 }
 
-__device__ float density_function(float beta, float cost) {
+__device__
+float density_function(float beta, float cost) {
     // printf("%f-%f\n", beta, cost);
 	return exp2f(-beta * cost);
 }
-
-__device__ float get_randomNum(unsigned int seed, int maxLimit) {
+__device__
+void cost_function(){}
+__device__
+float get_randomNum(unsigned int seed, int maxLimit) {
   /* CUDA's random number library uses curandState_t to keep track of the seed value
      we will store a random state for every thread  */
   curandState_t state;
@@ -79,16 +83,6 @@ __device__ float get_randomNum(unsigned int seed, int maxLimit) {
 }
 
 
-
-__device__ float cost_function_device(float * data, int length){
-    //dummy cost, just sum up all
-    float res = 0;
-
-    for(int i=0; i<length; i++)
-        res += data[i];
-    // printf("res: %f\n", res);
-    return res/1000;
-}
 __device__
 void changeTemparature(float * temparature, unsigned int seed){
     int t1 = get_randomNum(seed, nBlocks);
@@ -105,11 +99,12 @@ void Metropolis_Hastings(int* pickedIdAddr, float* costList, float* temparature)
 
 }
 __global__
-void Do_Metropolis_Hastings(automatedLayout* al, int * pickedIdxs,unsigned int seed){
+void Do_Metropolis_Hastings(int * pickedIdxs,unsigned int seed){
 	float* temparature = sFloats;
-	float* costList = (float *) & temparature[nBlocks * sizeof(float)];
+	float* costList = (float *) & temparature[nBlocks];
+    float* constrainParams = (float *) & costList[nBlocks * 11];
 	temparature[blockIdx.x] = -get_randomNum(seed+blockIdx.x, 100) / 10;
-	costList[blockIdx.x] = al->cost_function();
+	cost_function();
 	int* pickedIdAddr = &pickedIdxs[blockIdx.x * nTimes];
 	Metropolis_Hastings(pickedIdAddr, costList, temparature);
 	__syncthreads();
@@ -129,25 +124,10 @@ void roomInitialization(Room* m_room){
 	room->RoomCopy(*m_room);
 }
 
-automatedLayout::automatedLayout(vector<float>in_weights) {
-
-	// constrains = new layoutConstrains(m_room);
-	min_cost = INFINITY;
-
-	// cout<<"shenmemaobing: " <<room->deviceObjs[1].id<<endl;
-	cudaMallocManaged(&weights, in_weights.size() * sizeof(float));
-	for(int i=0;i<in_weights.size();i++)
-		weights[i] = in_weights[i];
-
-	cudaMallocManaged(&resTransAndRot,  4 * sizeof(float));
-	// for(int i=0;i<RES_NUM*4;i++)
-	// 	resTransAndRot[i] = i;
-	// float tmpf[] = {1.0f, 1.5f, 0.5f,1.0f};
-	// cudaMemcpy(resTransAndRot, tmpf, 4*sizeof(float), cudaMemcpyHostToDevice);
-}
 
 
-void generate_suggestions(automatedLayout * layout){
+
+void generate_suggestions(){
 	if(room->objctNum == 0)
 		return;
     int * pickedIdxs; //should be in global mem
@@ -165,7 +145,7 @@ void generate_suggestions(automatedLayout * layout){
 
 	AssignFurnitures<<<nBlocks, room->objctNum, objMem>>>();
 	cudaDeviceSynchronize();
-	Do_Metropolis_Hastings<<<nBlocks, room->objctNum, temMem>>>(layout, pickedIdxs, time(NULL));
+	Do_Metropolis_Hastings<<<nBlocks, room->objctNum, temMem>>>(pickedIdxs, time(NULL));
 	cudaDeviceSynchronize();
 
 	//cudaFree(resTransAndRot);
@@ -182,14 +162,11 @@ void generate_suggestions(automatedLayout * layout){
 
 }
 __device__ __host__
-void automatedLayout::random_along_wall(int furnitureID) {
+void random_along_wall(int furnitureID) {
 }
 
-__device__
-float automatedLayout::cost_function(){
-	return 0;
-}
-void automatedLayout::initial_assignment(){
+
+void initial_assignment(){
     for (int i = 0; i < room->freeObjNum; i++) {
     	singleObj* obj = &room->deviceObjs[room->freeObjIds[i]];
     	if (obj->adjoinWall)
@@ -201,7 +178,7 @@ void automatedLayout::initial_assignment(){
 }
 
 
-void parser_inputfile(const char* filename, Room * room, vector<float>& weights) {
+void parser_inputfile(const char* filename, Room * room) {
 	ifstream instream(filename);
 	string str;
 	vector<vector<float>> parameters;
@@ -251,16 +228,13 @@ void parser_inputfile(const char* filename, Room * room, vector<float>& weights)
 			room->add_a_focal_point(parameters[i]);
 			break;
 		case 'v':
-			weights = parameters[i];
+            for(int k=0;k<parameters[i].size(); k++)
+                weights[k] = parameters[i][k];
 			break;
         default:
             break;
         }
     }
-    if (weights.size() < 11) {
-		for (int i = weights.size(); i < 11; i++)
-			weights.push_back(1.0f);
- 	}
 }
 int main(int argc, char** argv){
     char* filename;
@@ -276,12 +250,11 @@ int main(int argc, char** argv){
 	int r = strcpy_s(filename, 100, "E:/layoutParam.txt");
 	r = strcpy_s(existance_file, 100, "E:/fixedObj.txt");
 	Room* room = new Room();
-	vector<float>weights;
-	parser_inputfile(filename, room, weights);
+	parser_inputfile(filename, room);
 	// parser_inputfile(existance_file, room, weights);
 	room->initialize_room();
 	if (room != nullptr && (room->objctNum != 0 || room->wallNum != 0))
-        startToProcess(room, weights);
+        startToProcess(room);
 	// system("pause");
 	return 0;
 }

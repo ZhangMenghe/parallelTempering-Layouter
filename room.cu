@@ -1,15 +1,9 @@
 #include<iostream>
-#include "mcmc.cuh"
+#include "room.cuh"
 #include "utils.cuh"
 #include "math.h"
+using namespace cv;
 using namespace std;
-
-// class test{
-// 	__device__ __host__ void mtest(){
-// 		printf("call from device test\n", );
-// 	}
-// };
-
 
 //ax,ay,bx,by
 void Room::init_a_wall(wall *newWall, vector<float> params) {
