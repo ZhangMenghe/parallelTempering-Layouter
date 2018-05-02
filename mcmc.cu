@@ -36,7 +36,7 @@ public:
 	automatedLayout(vector<float>in_weights);
 	void generate_suggestions();
 	void display_suggestions();
-	__device__ void initial_assignment();
+	void initial_assignment(const Room* refRoom);
 	__device__ float cost_function();
 };
 
@@ -62,6 +62,7 @@ void startToProcess(Room * m_room, vector<float> weights){
 	setUpDevices();
 	roomInitialization(m_room);
 	automatedLayout * layout = new automatedLayout(weights);
+	layout->initial_assignment(m_room);
 	layout->generate_suggestions();
    // 	// layout->display_suggestions();
 }
@@ -120,7 +121,6 @@ void Do_Metropolis_Hastings(automatedLayout* al, int * pickedIdxs,unsigned int s
 	float* temparature = sFloats;
 	float* costList = (float *) & temparature[nBlocks * sizeof(float)];
 	temparature[blockIdx.x] = -get_randomNum(seed+blockIdx.x, 100) / 10;
-	al->initial_assignment();
 	costList[blockIdx.x] = al->cost_function();
 	int* pickedIdAddr = &pickedIdxs[blockIdx.x * nTimes];
 	Metropolis_Hastings(pickedIdAddr, costList, temparature);
@@ -203,8 +203,6 @@ void automatedLayout:: generate_suggestions(){
 	// int sharedMem = nBlocks * (sizeof(room->objects)+ 2*sizeof(float)+ sizeof(*room) + sizeof(*deviceWeights));
 	int objMem = nBlocks * room->objctNum * sizeof(singleObj);
 	int temMem = nBlocks * sizeof(float);
-	float * rArray;
-	cudaMallocManaged(&rArray, nBlocks * sizeof(float));
 
 	AssignFurnitures<<<nBlocks, room->objctNum, objMem >>>();
 	cudaDeviceSynchronize();
@@ -217,11 +215,11 @@ void automatedLayout:: generate_suggestions(){
 	cudaFree(room);
 
 
-    for(int i=0;i<nBlocks;i++){
-        // for(int j=0; j<numofObjs; j++)
-            cout<<rArray[i]<<" ";
-        cout<<endl;
-    }
+    // for(int i=0;i<nBlocks;i++){
+    //     // for(int j=0; j<numofObjs; j++)
+    //         cout<<rArray[i]<<" ";
+    //     cout<<endl;
+    // }
 
 }
 void automatedLayout::random_along_wall(int furnitureID){
@@ -231,23 +229,18 @@ __device__
 float automatedLayout::cost_function(){
 	return 0;
 }
-__device__
-void automatedLayout::initial_assignment(){
-
+void automatedLayout::initial_assignment(const Room * refRoom){
+	for (int i = 0; i < refRoom->freeObjNum; i++) {
+		singleObj* obj = &room->deviceObjs[refRoom->freeObjIds[i]];
+		if (obj->adjoinWall)
+			random_along_wall(refRoom->freeObjIds[i]);
+		else if (obj->alignedTheWall)
+			cout<<"do nothing now"<<endl;
+			// room->set_obj_zrotation(refRoom->walls[rand() % refRoom->wallNum].zrotation, room->freeObjIds[i]);
+	}
+	room->update_furniture_mask();
 }
-// 	for (int i = 0; i < room->freeObjIds.size(); i++) {
-// 		singleObj* obj = &room->objects[room->freeObjIds[i]];
-// 		if (obj->adjoinWall)
-// 			random_along_wall(room->freeObjIds[i]);
-// 		else if (obj->alignedTheWall)
-// 			room->set_obj_zrotation(room->walls[rand() % room->wallNum].zrotation, room->freeObjIds[i]);
-// 	}
-// 	room->update_furniture_mask();
-// 	min_cost = cost_function();
-// 	if (min_cost == -1)
-// 		min_cost = INFINITY;
-//
-// }
+
 // int main(int argc, char** argv){
 //     setUpDevices();
 //     seed = time(NULL);

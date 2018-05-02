@@ -8,7 +8,11 @@ using namespace std;
 using namespace cv;
 #ifndef __ROOM_H__
 #define __ROOM_H__
-
+// class test{
+// 	__device__ __host__ void mtest(){
+// 		printf("call from device test\n", );
+// 	}
+// };
 struct mRect2f{
 	float x,y;
 	float width,height;
@@ -228,6 +232,9 @@ public:
 			focalPoint_map[0] = point;
 	}
 	void update_mask_by_object(const singleObj* obj, unsigned char * target, float movex = -1, float movey=-1){
+	}
+	void update_furniture_mask(){
+		//TODO: DON'T KNOW....
 	}
 };
 #endif
