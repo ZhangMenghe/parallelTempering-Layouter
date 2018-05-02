@@ -17,7 +17,7 @@ const unsigned int WHICH_GPU = 0;
 const unsigned int nTimes =20;
 
 void roomInitialization(Room* m_room);
-
+void generate_suggestions(automatedLayout * layout);
 extern __shared__ singleObj sObjs[];
 extern __shared__ float sFloats[];
 __device__ __managed__ Room* room;
@@ -45,7 +45,7 @@ void startToProcess(Room * m_room, vector<float> weights){
 	roomInitialization(m_room);
 	automatedLayout * layout = new automatedLayout(weights);
 	layout->initial_assignment(m_room);
-	layout->generate_suggestions();
+	generate_suggestions(layout);
    // 	// layout->display_suggestions();
 }
 
@@ -167,7 +167,7 @@ automatedLayout::automatedLayout(vector<float>in_weights) {
 }
 
 
-void automatedLayout:: generate_suggestions(){
+void generate_suggestions(automatedLayout * layout){
 	if(room->objctNum == 0)
 		return;
     int * pickedIdxs; //should be in global mem
@@ -188,12 +188,12 @@ void automatedLayout:: generate_suggestions(){
 
 	AssignFurnitures<<<nBlocks, room->objctNum, objMem >>>();
 	cudaDeviceSynchronize();
-	Do_Metropolis_Hastings<<<nBlocks, room->objctNum, temMem>>>(this, pickedIdxs, time(NULL));
+	Do_Metropolis_Hastings<<<nBlocks, room->objctNum, temMem>>>(layout, pickedIdxs, time(NULL));
 	cudaDeviceSynchronize();
 
-	cudaFree(resTransAndRot);
+	//cudaFree(resTransAndRot);
 	cudaFree(pickedIdxs);
-	cudaFree(weights);
+//	cudaFree(weights);
 	cudaFree(room);
 
 

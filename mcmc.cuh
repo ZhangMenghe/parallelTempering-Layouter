@@ -16,7 +16,7 @@ public:
 	float min_cost;
     float *resTransAndRot;
 	automatedLayout(vector<float>in_weights);
-	void generate_suggestions();
+	//void generate_suggestions();
 	void display_suggestions();
 	void initial_assignment(const Room* refRoom);
 	__device__ float cost_function();
