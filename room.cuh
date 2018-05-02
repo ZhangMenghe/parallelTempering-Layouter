@@ -88,7 +88,8 @@ public:
     void add_an_object(vector<float> params, bool isPrevious = false, bool isFixed = false);
     void add_a_focal_point(vector<float> fp);
 	__device__ __host__ void set_obj_zrotation(singleObj * obj, float new_rotation);
-	__host__ __device__ void update_obj_boundingBox_and_vertices(singleObj* obj);
+	__device__ __host__ bool set_obj_translation(singleObj* obj, float tx, float ty);
+	
 	void update_mask_by_object(const singleObj* obj, unsigned char * target, float movex = -1, float movey=-1);
     void update_furniture_mask();
 };

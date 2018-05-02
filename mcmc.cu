@@ -40,7 +40,8 @@ void setUpDevices(){
     cudaDeviceReset();
 }
 void debugCaller(){
-    room->set_obj_zrotation(&room->deviceObjs[0], PI);
+    // room->set_obj_zrotation(&room->deviceObjs[0], PI);
+    // room->set_obj_translation(&room->deviceObjs[0], -50, 0);
 }
 void startToProcess(Room * m_room, vector<float> weights){
 	//cout<<"hello from mcmc"<<endl;
