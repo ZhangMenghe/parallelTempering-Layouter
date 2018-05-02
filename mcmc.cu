@@ -1,12 +1,14 @@
+#include <iostream>
+#include <string>
+#include<fstream>
 #include <limits.h>
-#include <vector>
 #include <curand.h>
 #include <curand_kernel.h>
 #include <algorithm>
-#include "layoutConstrains.h"
-#include "room.h"
-#include "predefinedConstrains.h"
+#include "mcmc.cuh"
+
 #define RES_NUM 1
+
 using namespace std;
 using namespace cv;
 
@@ -20,27 +22,7 @@ extern __shared__ singleObj sObjs[];
 extern __shared__ float sFloats[];
 __device__ __managed__ Room* room;
 
-class automatedLayout
-{
-private:
-	layoutConstrains *constrains;
-	float *weights;
-	int debugParam = 0;
-    void random_along_wall(int furnitureID);
 
-
-public:
-    // Room * room;
-	float min_cost;
-    float *resTransAndRot;
-	automatedLayout(vector<float>in_weights);
-	void generate_suggestions();
-	void display_suggestions();
-	void initial_assignment(const Room* refRoom);
-	__device__ float cost_function();
-};
-
-int seed;
 void setUpDevices(){
     int deviceCount = 0;
     cudaGetDeviceCount(&deviceCount);
@@ -241,10 +223,88 @@ void automatedLayout::initial_assignment(const Room * refRoom){
 	room->update_furniture_mask();
 }
 
-// int main(int argc, char** argv){
-//     setUpDevices();
-//     seed = time(NULL);
-//     srand(seed);
-//     generate_suggestions();
-//     return 0;
-// }
+
+void parser_inputfile(const char* filename, Room * room, vector<float>& weights) {
+	ifstream instream(filename);
+	string str;
+	vector<vector<float>> parameters;
+	vector<char> cateType;
+	char  delims[] = " :,\t\n";
+	char* context = nullptr;
+	while (instream && getline(instream, str)) {
+		if (!str.length())
+			continue;
+		char * charline = new char[300];
+		int r = strcpy_s(charline, 300, str.c_str());
+		char * itemCate = strtok_s(charline,delims,&context);
+		vector<float>param;
+		char * token = strtok_s(nullptr, delims, &context);
+		while (token != nullptr) {
+			param.push_back(atof(token));
+			token = strtok_s(nullptr, delims, &context);
+		}
+		parameters.push_back(param);
+		cateType.push_back(itemCate[0]);
+	}
+	instream.close();
+	int itemNum = cateType.size();
+	vector<vector<float>> fixedObjParams;
+	vector<vector<float>> mergedObjParams;
+	vector<int> groupedIds;
+	int startId = 0;
+	if (cateType[0] == 'r') {
+		room->initialize_room(parameters[0][0], parameters[0][1]);
+		startId = 1;
+	}
+	else if(!room->initialized)
+		room->initialize_room();
+	for (int i = startId; i < itemNum; i++) {
+		switch (cateType[i])
+		{
+		case '#':
+			break;
+		//add a new wall
+		case 'w':
+			room->add_a_wall(parameters[i]);
+			break;
+		case 'f':
+			room->add_an_object(parameters[i]);
+			break;
+		case 'p':
+			room->add_a_focal_point(parameters[i]);
+			break;
+		case 'v':
+			weights = parameters[i];
+			break;
+        default:
+            break;
+        }
+    }
+    if (weights.size() < 11) {
+		for (int i = weights.size(); i < 11; i++)
+			weights.push_back(1.0f);
+ 	}
+}
+int main(int argc, char** argv){
+    char* filename;
+    /*if (argc < 2) {
+        filename = new char[9];
+        strcpy(filename, "input.txt");
+    }
+    else
+        filename = argv[1];*/
+	char* existance_file;
+	filename = new char[100];
+	existance_file = new char[100];
+	int r = strcpy_s(filename, 100, "E:/layoutParam.txt");
+	r = strcpy_s(existance_file, 100, "E:/fixedObj.txt");
+	Room* room = new Room();
+	vector<float>weights;
+	parser_inputfile(filename, room, weights);
+	// parser_inputfile(existance_file, room, weights);
+	room->initialize_room();
+	if (room != nullptr && (room->objctNum != 0 || room->wallNum != 0))
+        startToProcess(room, weights);
+	// system("pause");
+	return 0;
+}

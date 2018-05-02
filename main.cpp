@@ -1,7 +1,8 @@
 #include <iostream>
 #include <string>
-#include "room.h"
+#include "mcmc.cuh"
 #include "processFixedObjects.h"
+
 
 // using namespace cv;
 using namespace std;

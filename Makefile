@@ -8,7 +8,7 @@ REFLIBS =  -lopencv_core340 -lopencv_highgui340 -lopencv_imgproc340 -lopencv_img
 LINK_TARGET = mcmc.exe
 # OBJS = hello.o
 # DEPS = hello.h
-SRCS = main.cpp mcmc.cu
+SRCS = mcmc.cu room.cu
 
 REBUILD_ABLES = $(OBJS) $(LINK_TARGET)
 all: $(LINK_TARGET)
@@ -16,7 +16,7 @@ all: $(LINK_TARGET)
 # $(LINK_TARGET):$(OBJS)
 # 	$(CC) $(OBJS) -o $@
 # specify INCLUDE and LIB directory
-$(LINK_TARGET): main.cpp mcmc.cu
+$(LINK_TARGET): mcmc.cu room.cu
 	$(NVCC) $(CUDAFLAGS) -I$(PATH_INCLUDE) -L$(PATH_LIB) $(REFLIBS) $(SRCS) -o $@
 clean:
 	 del -f *.h.gch *.o *.exe *.exp *.lib
