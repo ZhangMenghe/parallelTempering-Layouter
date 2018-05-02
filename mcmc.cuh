@@ -18,7 +18,7 @@ public:
 	automatedLayout(vector<float>in_weights);
 	//void generate_suggestions();
 	void display_suggestions();
-	void initial_assignment(const Room* refRoom);
+	void initial_assignment();
 	__device__ float cost_function();
 };
 

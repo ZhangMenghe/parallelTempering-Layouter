@@ -56,6 +56,7 @@ public:
 	vector<singleObj> objects;
 	vector<wall> walls;
 	singleObj * deviceObjs;
+	wall * deviceWalls;
 	map<int, vector<int>> objGroupMap;
 	map<int, vector<pair<int, Vec2f>>> pairMap;
 	map<int, vector<float>> focalPoint_map;
@@ -89,7 +90,7 @@ public:
     void add_a_focal_point(vector<float> fp);
 	__device__ __host__ void set_obj_zrotation(singleObj * obj, float new_rotation);
 	__device__ __host__ bool set_obj_translation(singleObj* obj, float tx, float ty);
-	
+	__device__ float get_nearest_wall_dist(singleObj * obj);
 	void update_mask_by_object(const singleObj* obj, unsigned char * target, float movex = -1, float movey=-1);
     void update_furniture_mask();
 };

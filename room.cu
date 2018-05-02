@@ -97,6 +97,7 @@ void Room::update_mask_by_wall(const wall* wal) {
 
 void Room::RoomCopy(const Room & m_room){
 	objctNum = m_room.objctNum;
+	wallNum = m_room.wallNum;
 	freeObjNum = m_room.freeObjNum;
 	half_width = m_room.half_width;
 	half_height = m_room.half_height;
@@ -110,6 +111,10 @@ void Room::RoomCopy(const Room & m_room){
 	cudaMallocManaged(&deviceObjs,  objctNum * sizeof(singleObj));
 	for(int i=0; i<objctNum; i++)
 		deviceObjs[i] = m_room.objects[i];
+
+	cudaMallocManaged(&deviceWalls,  wallNum * sizeof(wall));
+	for(int i=0; i<wallNum; i++)
+		deviceWalls[i] = m_room.walls[i];
 
 	int tMem = colCount*rowCount * sizeof(unsigned char);
 	cudaMallocManaged(&furnitureMask, tMem);
@@ -232,7 +237,21 @@ bool Room::set_obj_translation(singleObj* obj, float tx, float ty) {
 	return true;
 }
 
+__device__
+float Room::get_nearest_wall_dist(singleObj * obj) {
+	float x = obj->translation[0], y = obj->translation[1];
+	float min_dist = INFINITY, dist;
 
+	for (int i = 0; i < wallNum; i++) {
+		dist = fabsf(deviceWalls[i].a * x + deviceWalls[i].b * y + deviceWalls[i].c) / sqrtf(deviceWalls[i].a * deviceWalls[i].a + deviceWalls[i].b * deviceWalls[i].b);
+		if (dist < min_dist) {
+			min_dist = dist;
+			obj->nearestWall = i;
+		}
+	}
+	// printf("%d : %f\n", obj->nearestWall, min_dist);
+	return min_dist;
+}
 void Room::update_mask_by_object(const singleObj* obj, unsigned char * target, float movex, float movey){
 }
 void Room::update_furniture_mask(){
@@ -296,19 +315,7 @@ void Room::update_furniture_mask(){
 // 		}
 // 		return res;
 // 	}
-// 	float get_nearest_wall_dist(singleObj * obj) {
-// 		float x = obj->translation[0], y = obj->translation[1];
-// 		float min_dist = INFINITY, dist;
-// 		//int min_id = -1;
-// 		for (int i = 0; i < wallNum; i++) {
-// 			dist = abs(walls[i].a * x + walls[i].b * y + walls[i].c) / sqrt(walls[i].a * walls[i].a + walls[i].b * walls[i].b);
-// 			if (dist < min_dist) {
-// 				min_dist = dist;
-// 				obj->nearestWall = i;
-// 			}
-// 		}
-// 		return min_dist;
-// 	}
+
 
 //
 
@@ -327,23 +334,7 @@ void Room::update_furniture_mask(){
 // 		//cout << "obstacleArea:  " << obstacleArea<<endl;
 // 		obstacles.push_back(vertices);
 // 	}
-// 	void update_obj_boundingBox_by_vertices(singleObj& obj) {
-// 		vector<float> xbox = { obj.vertices[0][0], obj.vertices[1][0], obj.vertices[2][0], obj.vertices[3][0] };
-// 		vector<float> ybox = { obj.vertices[0][1], obj.vertices[1][1], obj.vertices[2][1], obj.vertices[3][1] };
-//
-// 		vector<float>::iterator it = min_element(xbox.begin(), xbox.end());
-// 		//make sure bounding box start vertex is at the begining
-// 		int startIdx = distance(xbox.begin(), it);
-// 		vector<Vec2f> sub(obj.vertices.begin(), obj.vertices.begin() + startIdx);
-// 		obj.vertices.insert(obj.vertices.end(), sub.begin(), sub.end());
-// 		obj.vertices.erase(obj.vertices.begin(), obj.vertices.begin() + startIdx);
-//
-// 		float min_x = *it;
-// 		float min_y = *min_element(ybox.begin(), ybox.end());
-// 		float max_x = *max_element(xbox.begin(), xbox.end());
-// 		float max_y = *max_element(ybox.begin(), ybox.end());
-// 		obj.boundingBox = Rect2f(min_x, max_y, (max_x - min_x), (max_y - min_y));
-// 	}
+
 
 //
 // 	void update_furniture_mask() {

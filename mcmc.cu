@@ -42,6 +42,7 @@ void setUpDevices(){
 void debugCaller(){
     // room->set_obj_zrotation(&room->deviceObjs[0], PI);
     // room->set_obj_translation(&room->deviceObjs[0], -50, 0);
+    // room->get_nearest_wall_dist(&room->deviceObjs[0]);
 }
 void startToProcess(Room * m_room, vector<float> weights){
 	//cout<<"hello from mcmc"<<endl;
@@ -188,15 +189,15 @@ __device__
 float automatedLayout::cost_function(){
 	return 0;
 }
-void automatedLayout::initial_assignment(const Room * refRoom){
-	for (int i = 0; i < refRoom->freeObjNum; i++) {
-		singleObj* obj = &room->deviceObjs[refRoom->freeObjIds[i]];
-		if (obj->adjoinWall)
-			random_along_wall(refRoom->freeObjIds[i]);
-		else if (obj->alignedTheWall)
-			room->set_obj_zrotation(&room->deviceObjs[room->freeObjIds[i]], refRoom->walls[rand() % refRoom->wallNum].zrotation);
-	}
-	room->update_furniture_mask();
+void automatedLayout::initial_assignment(){
+    for (int i = 0; i < room->freeObjNum; i++) {
+    	singleObj* obj = &room->deviceObjs[room->freeObjIds[i]];
+    	if (obj->adjoinWall)
+    		random_along_wall(room->freeObjIds[i]);
+    	else if (obj->alignedTheWall)
+    		room->set_obj_zrotation(&room->deviceObjs[room->freeObjIds[i]], room->deviceWalls[rand() % room->wallNum].zrotation);
+    }
+    room->update_furniture_mask();
 }
 
 
