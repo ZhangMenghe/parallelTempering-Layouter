@@ -1,6 +1,8 @@
-
+#include<iostream>
 #include "mcmc.cuh"
-
+#include "utils.cuh"
+#include "math.h"
+using namespace std;
 
 // class test{
 // 	__device__ __host__ void mtest(){
@@ -93,7 +95,31 @@
 
 
 
+	void Room::RoomCopy(const Room & m_room){
+		objctNum = m_room.objctNum;
+		freeObjNum = m_room.freeObjNum;
+		half_width = m_room.half_width;
+		half_height = m_room.half_height;
+		indepenFurArea = m_room.indepenFurArea;
+		obstacleArea = m_room.obstacleArea;
+		wallArea = m_room.wallArea;
+		overlappingThreshold = m_room.overlappingThreshold;
+		colCount = m_room.colCount;
+		rowCount = m_room.rowCount;
+		cudaMemcpy(freeObjIds, m_room.freeObjIds, freeObjNum* sizeof(int), cudaMemcpyHostToDevice);
+		cudaMallocManaged(&deviceObjs,  objctNum * sizeof(singleObj));
+		for(int i=0; i<objctNum; i++)
+			deviceObjs[i] = m_room.objects[i];
 
+		int tMem = colCount*rowCount * sizeof(unsigned char);
+		cudaMallocManaged(&furnitureMask, tMem);
+		cudaMallocManaged(&furnitureMask_initial, tMem);
+		cudaMemcpy(furnitureMask, m_room.furnitureMask, tMem, cudaMemcpyHostToDevice);
+		cudaMemcpy(furnitureMask_initial, m_room.furnitureMask_initial, tMem, cudaMemcpyHostToDevice);
+		//TODO:map..obstacle
+		cout<<"test- "<<int(furnitureMask[100])<<endl;
+
+	}
 	void Room::initialize_room(float s_width, float s_height) {
 		initialized = true;
 		half_width = s_width / 2;
@@ -157,6 +183,30 @@
 			focalPoint_map[fp[3]] = point;
 		else
 			focalPoint_map[0] = point;
+	}
+	//TODO: CHECK IF THIS IS RAD?
+	__device__ __host__
+	void Room::set_obj_zrotation(singleObj * obj, float nrot) {
+		float oldRot = obj->zrotation;
+		nrot = remainderf(nrot, 2*PI);
+		obj->zrotation = nrot;
+		float gap = obj->zrotation - oldRot;
+		float s = sinf(gap); float c=cosf(gap);
+		float minx = INFINITY,maxx =-INFINITY, miny=INFINITY, maxy = -INFINITY;
+		for(int i=0; i<4; i++){
+			rot_around_point(obj->translation, &obj->vertices[2*i], &obj->vertices[2*i+1], s, c);
+			minx = (obj->vertices[2*i] < minx)? obj->vertices[2*i]:minx;
+			maxx = (obj->vertices[2*i] > maxx)? obj->vertices[2*i]:maxx;
+			miny = (obj->vertices[2*i + 1] < miny)? obj->vertices[2*i+1]:miny;
+			maxy = (obj->vertices[2*i + 1] > maxy)? obj->vertices[2*i+1]:maxy;
+		}
+		obj->boundingBox.x = minx; obj->boundingBox.y=maxy;
+		obj->boundingBox.width = maxx-minx; obj->boundingBox.height = maxy-miny;
+	}
+
+	__host__ __device__
+	void Room::update_obj_boundingBox_and_vertices(singleObj* obj){
+
 	}
 	void Room::update_mask_by_object(const singleObj* obj, unsigned char * target, float movex, float movey){
 	}
@@ -222,26 +272,8 @@
 
 
 
-// 	void rot_around_point(const Vec3f& center, Vec2f& pos, float s, float c) {
-// 		// translate point back to origin:
-// 		pos[0] -= center[0];
-// 		pos[1] -= center[1];
-//
-// 		// rotate point
-// 		float xnew = pos[0] * c - pos[1] * s;
-// 		float ynew = pos[0] * s + pos[1] * c;
-//
-// 		// translate point back:
-// 		pos[0] = xnew + center[0];
-// 		pos[1] = ynew + center[1];
-// 	}
-// 	void set_obj_zrotation(float new_rotation, int id) {
-// 		if (objects[id].zrotation == fmod(new_rotation, CV_PI))
-// 			return;
-// 		float old = objects[id].zrotation;
-// 		objects[id].zrotation = fmod(new_rotation, CV_PI);
-// 		update_obj_boundingBox_and_vertices(objects[id], old);
-// 	}
+
+
 //
 // 	bool set_obj_translation(float tx, float ty, int id) {
 // 		Mat_<uchar> tmpCanvas = furnitureMask;

@@ -10,7 +10,7 @@ class automatedLayout{
 	// layoutConstrains *constrains;
 	float *weights;
 	int debugParam = 0;
-    void random_along_wall(int furnitureID);
+    __device__ __host__ void random_along_wall(int furnitureID);
 public:
     // Room * room;
 	float min_cost;

@@ -39,12 +39,16 @@ void setUpDevices(){
     cudaGetDevice(&wgpu);
     cudaDeviceReset();
 }
+void debugCaller(){
+    room->set_obj_zrotation(&room->deviceObjs[0], PI);
+}
 void startToProcess(Room * m_room, vector<float> weights){
 	//cout<<"hello from mcmc"<<endl;
 	setUpDevices();
 	roomInitialization(m_room);
 	automatedLayout * layout = new automatedLayout(weights);
-	layout->initial_assignment(m_room);
+	// layout->initial_assignment(m_room);
+    debugCaller();
 	generate_suggestions(layout);
    // 	// layout->display_suggestions();
 }
@@ -117,33 +121,7 @@ void AssignFurnitures(){
 }
 
 
-void Room::RoomCopy(const Room & m_room){
-	objctNum = m_room.objctNum;
-	freeObjNum = m_room.freeObjNum;
-	half_width = m_room.half_width;
-	half_height = m_room.half_height;
-	indepenFurArea = m_room.indepenFurArea;
-	obstacleArea = m_room.obstacleArea;
-	wallArea = m_room.wallArea;
-	overlappingThreshold = m_room.overlappingThreshold;
-	colCount = m_room.colCount;
-	rowCount = m_room.rowCount;
-	cudaMemcpy(freeObjIds, m_room.freeObjIds, freeObjNum* sizeof(int), cudaMemcpyHostToDevice);
-	cudaMallocManaged(&deviceObjs,  objctNum * sizeof(singleObj));
-	for(int i=0; i<objctNum; i++)
-		deviceObjs[i] = m_room.objects[i];
 
-
-	int tMem = colCount*rowCount * sizeof(unsigned char);
-	cout<<colCount<<"-"<<rowCount<<endl;
-	cudaMallocManaged(&furnitureMask, tMem);
-	cudaMallocManaged(&furnitureMask_initial, tMem);
-	cudaMemcpy(furnitureMask, m_room.furnitureMask, tMem, cudaMemcpyHostToDevice);
-	cudaMemcpy(furnitureMask_initial, m_room.furnitureMask_initial, tMem, cudaMemcpyHostToDevice);
-	//TODO:map..obstacle
-	// cout<<"test- "<<int(furnitureMask[100])<<endl;
-
-}
 void roomInitialization(Room* m_room){
 	cudaMallocManaged(&room,  sizeof(Room));
 	room->RoomCopy(*m_room);
@@ -177,16 +155,13 @@ void generate_suggestions(automatedLayout * layout){
     for(int i=0; i<nBlocks*nTimes; i++)
         pickedIdxs[i] = rand()%room->objctNum;
 
-	//memory to store result, should be in global mem
-
-
     //dynamic shared mem, <<<nb, nt, sm>>>
 	//obj +  temparing + room + weight
 	// int sharedMem = nBlocks * (sizeof(room->objects)+ 2*sizeof(float)+ sizeof(*room) + sizeof(*deviceWeights));
 	int objMem = nBlocks * room->objctNum * sizeof(singleObj);
 	int temMem = nBlocks * sizeof(float);
 
-	AssignFurnitures<<<nBlocks, room->objctNum, objMem >>>();
+	AssignFurnitures<<<nBlocks, room->objctNum, objMem>>>();
 	cudaDeviceSynchronize();
 	Do_Metropolis_Hastings<<<nBlocks, room->objctNum, temMem>>>(layout, pickedIdxs, time(NULL));
 	cudaDeviceSynchronize();
@@ -204,9 +179,10 @@ void generate_suggestions(automatedLayout * layout){
     // }
 
 }
-void automatedLayout::random_along_wall(int furnitureID){
-
+__device__ __host__
+void automatedLayout::random_along_wall(int furnitureID) {
 }
+
 __device__
 float automatedLayout::cost_function(){
 	return 0;
@@ -217,8 +193,7 @@ void automatedLayout::initial_assignment(const Room * refRoom){
 		if (obj->adjoinWall)
 			random_along_wall(refRoom->freeObjIds[i]);
 		else if (obj->alignedTheWall)
-			cout<<"do nothing now"<<endl;
-			// room->set_obj_zrotation(refRoom->walls[rand() % refRoom->wallNum].zrotation, room->freeObjIds[i]);
+			room->set_obj_zrotation(&room->deviceObjs[room->freeObjIds[i]], refRoom->walls[rand() % refRoom->wallNum].zrotation);
 	}
 	room->update_furniture_mask();
 }
