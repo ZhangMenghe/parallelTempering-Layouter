@@ -13,6 +13,18 @@ struct mRect2f{
 	float x,y;
 	float width,height;
 };
+struct groupMapStruct{
+	int gid;
+	int memNum;
+	float focal[3] = {INFINITY, INFINITY, INFINITY};
+	int objIds[MAX_NUM_OBJS];
+};
+struct pairMapStruct{
+	int pid;
+	int objTypes[MAX_SUPPORT_TYPE];
+	int minDist[MAX_SUPPORT_TYPE];
+	int maxDist[MAX_SUPPORT_TYPE];
+};
 
 struct singleObj{
 	int id;
@@ -57,9 +69,9 @@ public:
 	vector<wall> walls;
 	singleObj * deviceObjs;
 	wall * deviceWalls;
-	map<int, vector<int>> objGroupMap;
-	map<int, vector<pair<int, Vec2f>>> pairMap;
-	map<int, vector<float>> focalPoint_map;
+	groupMapStruct groupMap[MAX_GROUP_ALLOW];
+	pairMapStruct pairMap[CONSTRAIN_PAIRS];
+	int groupNum;
 	int objctNum;
 	int wallNum;
 	int freeObjNum;

@@ -54,40 +54,38 @@ void Room::init_an_object(vector<float>params, bool isFixed, bool isPrevious) {
 		// update_obj_boundingBox_and_vertices(obj, 0);
 
 	indepenFurArea += obj.objWidth * obj.objHeight; //get_single_obj_maskArea(obj.vertices);
-	//TODO:NEAREST WALL?
-	//obj.nearestWall = find_nearest_wall(obj.translation[0], obj.translation[1]);
 
-	objGroupMap[params[15]].push_back(obj.id);
+	int gidx = 0;
+	for(; gidx<groupNum; gidx++){
+		if(groupMap[gidx].gid == params[15])
+			groupMap[gidx].objIds[groupMap[gidx].memNum++] = obj.id;
+	}
+	if(gidx == groupNum){
+		groupMap[groupNum].gid = params[15];
+		groupMap[groupNum].memNum = 1;
+		groupMap[groupNum].objIds[0] = obj.id;
+		groupNum++;
+	}
 
 	objects.push_back(obj);
 	objctNum++;
 	if (!isFixed)
 		freeObjIds[freeObjNum++] = obj.id;
 	else
-		//TODO: NO IDEAS HOW TO UPDATE MASK
 		update_mask_by_object(&obj, furnitureMask_initial);//is a fixed object
 }
 void Room::set_pairwise_map() {
-	vector<pair<int, Vec2f>> chair;
-	// seat to seat
-	chair.push_back(pair <int, Vec2f>(0, Vec2f(0, 50)));
-	//coffee table to seat
-	chair.push_back(pair <int, Vec2f>(1, Vec2f(40, 46)));
-	//seat to end table
-	chair.push_back(pair <int, Vec2f>(3, Vec2f(0, 30)));
+	pairMap[0].pid = TYPE_CHAIR;
+	int mtype[3] = {TYPE_CHAIR, TYPE_COFFETABLE, TYPE_ENDTABLE};
+	copy(begin(mtype), end(mtype), begin(pairMap[0].objTypes));
+	int mdist[3] = {0,40,0}; int mdistm[3] =  {50,46,30};
+	copy(begin(mdist), end(mdist), begin(pairMap[0].minDist));
+	copy(begin(mdistm), end(mdistm), begin(pairMap[0].maxDist));
 
-	vector<pair<int, Vec2f>> bed;
-	// bed TO nightstand
-	bed.push_back(pair <int, Vec2f>(5, Vec2f(0, 30)));
-	// bed to wall
-	bed.push_back(pair <int, Vec2f>(100, Vec2f(0, 0)));
-
-	vector<pair<int, Vec2f>> shelf;
-	shelf.push_back(pair<int, Vec2f>(100, Vec2f(0, 0)));
-
-	pairMap[TYPE_CHAIR] = chair;
-	pairMap[TYPE_BED] = bed;
-	pairMap[TYPE_SHELF] = shelf;
+	pairMap[1].pid = TYPE_BED;
+	pairMap[1].objTypes[0] = TYPE_NIGHTSTAND;
+	pairMap[1].minDist[0] = 0;
+	pairMap[1].maxDist[0] = 30;
 }
 void Room::update_mask_by_wall(const wall* wal) {
 	//TODO: DON'T KNOW HOW TO TACKLE WITH OBLIQUE WALL
@@ -122,8 +120,6 @@ void Room::RoomCopy(const Room & m_room){
 	cudaMemcpy(furnitureMask, m_room.furnitureMask, tMem, cudaMemcpyHostToDevice);
 	cudaMemcpy(furnitureMask_initial, m_room.furnitureMask_initial, tMem, cudaMemcpyHostToDevice);
 	//TODO:map..obstacle
-	cout<<"test- "<<int(furnitureMask[100])<<endl;
-
 }
 void Room::initialize_room(float s_width, float s_height) {
 	initialized = true;
@@ -183,13 +179,16 @@ void Room::add_an_object(vector<float> params, bool isPrevious, bool isFixed) {
 	init_an_object(params, isFixed, isPrevious);
 }
 void Room::add_a_focal_point(vector<float> fp) {
-	vector<float> point = {fp[0], fp[1], fp[2]};
-	if(fp.size()>3)
-		focalPoint_map[fp[3]] = point;
-	else
-		focalPoint_map[0] = point;
+	int groupId = (fp.size() == 3)? 0:fp[3];
+	for(int i=0; i<groupNum; i++){
+		if(groupId == groupMap[i].gid){
+			copy(fp.begin(), fp.begin()+3, groupMap[i].focal);
+			// printf("group: %d, %f - %f - %f", groupId, fp[0], fp[1], fp[2]);
+		}
+
+	}
 }
-//TODO: CHECK IF THIS IS RAD?
+
 __device__ __host__
 void Room::set_obj_zrotation(singleObj * obj, float nrot) {
 	float oldRot = obj->zrotation;
@@ -288,19 +287,6 @@ void Room::update_furniture_mask(){
 // 		else
 // 			drawContours(target, contours,-1, 1, FILLED, 8);
 // 	}
-
-
-
-
-
-//
-
-//
-// 	void set_objs_rotation(vector<float> rotation) {
-// 		for (int i = 0; i < objctNum; i++)
-// 			objects[i].zrotation = rotation[i];
-// 	}
-//
 
 // 	float * get_objs_TransAndRot(){
 // 		int FloatSize = sizeof(float);

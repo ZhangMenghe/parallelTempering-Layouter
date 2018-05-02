@@ -4,7 +4,12 @@
 
 #define PI 3.14159265359
 #define ANGLE_TO_RAD_F 0.0174533 //0.01745329251994329576923690768489
-#define MAX_NUM_OBJS 100
+
+#define MAX_NUM_OBJS 10
+#define MAX_SUPPORT_TYPE 10
+#define MAX_GROUP_ALLOW 2
+#define CONSTRAIN_PAIRS 2
+
 #define PersonSize 40//40cm x 40 cm
 #define BEDSIDE_DIST 91//currently not considered
 #define CABINET_DIST 61
