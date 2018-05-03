@@ -95,18 +95,18 @@ void changeTemparature(float * temparature, unsigned int seed){
 }
 
 __device__
-void Metropolis_Hastings(int* pickedIdAddr, float* costList, float* temparature){
+void Metropolis_Hastings(int* pickedIdAddr, float* costList, float* temparature, unsigned int seed){
 
 }
 __global__
-void Do_Metropolis_Hastings(int * pickedIdxs,unsigned int seed){
-	float* temparature = sFloats;
-	float* costList = (float *) & temparature[nBlocks];
-    float* constrainParams = (float *) & costList[nBlocks * 11];
+void Do_Metropolis_Hastings(int * pickedIdxs, unsigned int seed){
+    float* constrainParams = sFloats;
+	float* costList = (float *) & constrainParams[nBlocks * 11];
+    float* temparature = (float *) & costList[nBlocks];
+
 	temparature[blockIdx.x] = -get_randomNum(seed+blockIdx.x, 100) / 10;
-	cost_function();
 	int* pickedIdAddr = &pickedIdxs[blockIdx.x * nTimes];
-	Metropolis_Hastings(pickedIdAddr, costList, temparature);
+    // Metropolis_Hastings(pickedIdAddr, costList, temparature, seed);
 	__syncthreads();
 
 }
@@ -134,6 +134,7 @@ void generate_suggestions(){
 
 
     cudaMallocManaged(&pickedIdxs, nBlocks * nTimes * sizeof(int));
+    //block1.....block2....
     for(int i=0; i<nBlocks*nTimes; i++)
         pickedIdxs[i] = rand()%room->objctNum;
 
@@ -141,12 +142,13 @@ void generate_suggestions(){
 	//obj +  temparing + room + weight
 	// int sharedMem = nBlocks * (sizeof(room->objects)+ 2*sizeof(float)+ sizeof(*room) + sizeof(*deviceWeights));
 	int objMem = nBlocks * room->objctNum * sizeof(singleObj);
-	int temMem = nBlocks * sizeof(float);
+	int floatMem = 13 * nBlocks * sizeof(float);
 
 	AssignFurnitures<<<nBlocks, room->objctNum, objMem>>>();
 	cudaDeviceSynchronize();
-	Do_Metropolis_Hastings<<<nBlocks, room->objctNum, temMem>>>(pickedIdxs, time(NULL));
+	Do_Metropolis_Hastings<<<nBlocks, room->objctNum, floatMem>>>(pickedIdxs, time(NULL));
 	cudaDeviceSynchronize();
+
     room->freeMem();
 	cudaFree(pickedIdxs);
 	cudaFree(room);
