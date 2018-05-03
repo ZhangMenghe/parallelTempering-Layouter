@@ -95,6 +95,7 @@ public:
         initialized = false;
 
     }
+	void freeMem();
     void RoomCopy(const Room & m_room);
     void initialize_room(float s_width = 800.0f, float s_height = 600.0f);
     void add_a_wall(vector<float> params);

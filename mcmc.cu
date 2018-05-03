@@ -147,10 +147,8 @@ void generate_suggestions(){
 	cudaDeviceSynchronize();
 	Do_Metropolis_Hastings<<<nBlocks, room->objctNum, temMem>>>(pickedIdxs, time(NULL));
 	cudaDeviceSynchronize();
-
-	//cudaFree(resTransAndRot);
+    room->freeMem();
 	cudaFree(pickedIdxs);
-//	cudaFree(weights);
 	cudaFree(room);
 
 
@@ -178,7 +176,7 @@ void initial_assignment(){
 }
 
 
-void parser_inputfile(const char* filename, Room * room) {
+void parser_inputfile(const char* filename, Room * parser_inputfile) {
 	ifstream instream(filename);
 	string str;
 	vector<vector<float>> parameters;
@@ -207,11 +205,11 @@ void parser_inputfile(const char* filename, Room * room) {
 	vector<int> groupedIds;
 	int startId = 0;
 	if (cateType[0] == 'r') {
-		room->initialize_room(parameters[0][0], parameters[0][1]);
+		parser_inputfile->initialize_room(parameters[0][0], parameters[0][1]);
 		startId = 1;
 	}
-	else if(!room->initialized)
-		room->initialize_room();
+	else if(!parser_inputfile->initialized)
+		parser_inputfile->initialize_room();
 	for (int i = startId; i < itemNum; i++) {
 		switch (cateType[i])
 		{
@@ -219,13 +217,13 @@ void parser_inputfile(const char* filename, Room * room) {
 			break;
 		//add a new wall
 		case 'w':
-			room->add_a_wall(parameters[i]);
+			parser_inputfile->add_a_wall(parameters[i]);
 			break;
 		case 'f':
-			room->add_an_object(parameters[i]);
+			parser_inputfile->add_an_object(parameters[i]);
 			break;
 		case 'p':
-			room->add_a_focal_point(parameters[i]);
+			parser_inputfile->add_a_focal_point(parameters[i]);
 			break;
 		case 'v':
             for(int k=0;k<parameters[i].size(); k++)
@@ -249,12 +247,10 @@ int main(int argc, char** argv){
 	existance_file = new char[100];
 	int r = strcpy_s(filename, 100, "E:/layoutParam.txt");
 	r = strcpy_s(existance_file, 100, "E:/fixedObj.txt");
-	Room* room = new Room();
-	parser_inputfile(filename, room);
+	Room* parserRoom = new Room();
+	parser_inputfile(filename, parserRoom);
 	// parser_inputfile(existance_file, room, weights);
-	room->initialize_room();
-	if (room != nullptr && (room->objctNum != 0 || room->wallNum != 0))
-        startToProcess(room);
-	// system("pause");
+	if (parserRoom != nullptr && (parserRoom->objctNum != 0 || parserRoom->wallNum != 0))
+        startToProcess(parserRoom);
 	return 0;
 }

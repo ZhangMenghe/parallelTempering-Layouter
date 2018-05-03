@@ -115,6 +115,12 @@ void Room::RoomCopy(const Room & m_room){
 	cudaMemcpy(furnitureMask_initial, m_room.furnitureMask_initial, tMem, cudaMemcpyHostToDevice);
 	//TODO:map..obstacle
 }
+void Room::freeMem(){
+	cudaFree(deviceObjs);
+	cudaFree(deviceWalls);
+	cudaFree(furnitureMask);
+	cudaFree(furnitureMask_initial);
+}
 void Room::initialize_room(float s_width, float s_height) {
 	initialized = true;
 	half_width = s_width / 2;
