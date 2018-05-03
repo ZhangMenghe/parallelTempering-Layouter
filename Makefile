@@ -17,7 +17,9 @@ all: $(LINK_TARGET)
 # 	$(CC) $(OBJS) -o $@
 # specify INCLUDE and LIB directory
 $(LINK_TARGET): mcmc.cu room.cu
-	$(NVCC) $(CUDAFLAGS) -I$(PATH_INCLUDE) -L$(PATH_LIB) $(REFLIBS) $(SRCS) -o $@
+	$(NVCC) $(CUDAFLAGS) $(SRCS) -o $@
+# $(LINK_TARGET): mcmc.cu room.cu
+# 	$(NVCC) $(CUDAFLAGS) -I$(PATH_INCLUDE) -L$(PATH_LIB) $(REFLIBS) $(SRCS) -o $@
 clean:
 	 del -f *.h.gch *.o *.exe *.exp *.lib
 	 echo clean done

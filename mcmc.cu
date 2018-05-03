@@ -50,7 +50,7 @@ void debugCaller(){
 void startToProcess(Room * m_room){
 	setUpDevices();
     cudaMallocManaged(&room,  sizeof(Room));
-    room->RoomCopy(*m_room);
+    *room = Room(*m_room);
 
     //debugCaller();
     clock_t start, finish;
@@ -156,6 +156,7 @@ void Metropolis_Hastings(int* pickedIdAddr, float* costList, float* temparature,
         }
     }
 }
+
 __global__
 void Do_Metropolis_Hastings(int * pickedIdxs, unsigned int seed){
 	float* costList = sFloats;
@@ -167,17 +168,13 @@ void Do_Metropolis_Hastings(int * pickedIdxs, unsigned int seed){
 	__syncthreads();
 
 }
+
 __global__
-void AssignFurnitures(int objNum){
-    if(threadIdx.x<objNum){
-        int index = blockIdx.x * objNum + threadIdx.x;
-        sObjs[index] = room->deviceObjs[threadIdx.x];
-    }
+void AssignFurnitures(){
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    sObjs[index] = room->deviceObjs[threadIdx.x];
 	__syncthreads();
 }
-
-
-
 
 void generate_suggestions(){
 	if(room->objctNum == 0)
@@ -196,7 +193,7 @@ void generate_suggestions(){
 	int objMem = nBlocks * room->objctNum * sizeof(singleObj);
 	int floatMem = (1+nThreads) * nBlocks * sizeof(float);
     cout<<"assign begin"<<endl;
-	AssignFurnitures<<<nBlocks, nThreads, objMem>>>(room->objctNum);
+	AssignFurnitures<<<nBlocks, room->objctNum, objMem>>>();
 	cudaDeviceSynchronize();
     cout<<"assign done"<<endl;
 	Do_Metropolis_Hastings<<<nBlocks, nThreads, floatMem>>>(pickedIdxs, time(NULL));

@@ -2,7 +2,7 @@
 #include "room.cuh"
 #include "utils.cuh"
 #include "math.h"
-using namespace cv;
+
 using namespace std;
 
 //ax,ay,bx,by
@@ -21,7 +21,7 @@ void Room::init_a_wall(wall *newWall, vector<float> params) {
 	}
 	else {
 		newWall->a = (by - ay) / (bx - ax); newWall->b = -1; newWall->c = -(newWall->a*ax - ay);
-		newWall->zrotation = atanf(newWall->a)/ CV_PI *180;
+		newWall->zrotation = atanf(newWall->a)/ PI *180;
 	}
 }
 // 4*2 vertices, 2 center, 2 size, angle, label, zheight
@@ -87,7 +87,7 @@ void Room::update_mask_by_wall(const wall* wal) {
 
 
 
-void Room::RoomCopy(const Room & m_room){
+Room::Room(const Room & m_room){
 	objctNum = m_room.objctNum;
 	wallNum = m_room.wallNum;
 	freeObjNum = m_room.freeObjNum;

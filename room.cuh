@@ -2,9 +2,7 @@
 #include <vector>
 #include <map>
 #include "predefinedConstrains.h"
-#include "opencv2/core/core.hpp"
 
-using namespace cv;
 using namespace std;
 
 #ifndef __ROOM__
@@ -54,9 +52,9 @@ struct wall{
 class Room{
 private:
 	unsigned char * furnitureMask_initial;
-	Point card_to_graph_point(float x, float y) {
-		return Point(int(half_width + x), int(half_height - y));
-	}
+	// Point card_to_graph_point(float x, float y) {
+	// 	return Point(int(half_width + x), int(half_height - y));
+	// }
     //ax,ay,bx,by
 	void init_a_wall(wall *newWall, vector<float> params);
     void init_an_object(vector<float>params, bool isFixed = false, bool isPrevious = false);
@@ -64,7 +62,7 @@ private:
     void update_mask_by_wall(const wall* wal);
 
 	float t(float d, float m, float M, int a = 2);
-	void get_all_reflection(map<int, Vec3f> focalPoint_map, vector<Vec3f> &reflectTranslate, vector<float> & reflectZrot, float refk= INFINITY);
+	//void get_all_reflection(map<int, Vec3f> focalPoint_map, vector<Vec3f> &reflectTranslate, vector<float> & reflectZrot, float refk= INFINITY);
 	void get_pairwise_relation(const singleObj& obj1, const singleObj& obj2, int&pfg, float&m, float&M, int & wallRelId);
 	//Clearance :
 	//Mcv(I) that minimize the overlap between furniture(with space)
@@ -123,8 +121,8 @@ public:
         initialized = false;
 
     }
+	Room(const Room & m_room);
 	void freeMem();
-    void RoomCopy(const Room & m_room);
     void initialize_room(float s_width = 800.0f, float s_height = 600.0f);
     void add_a_wall(vector<float> params);
     void add_an_object(vector<float> params, bool isPrevious = false, bool isFixed = false);
