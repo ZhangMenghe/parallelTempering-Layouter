@@ -8,13 +8,13 @@
 // #include "predefinedConstrains.h"
 #include "room.cuh"
 #define RES_NUM 1
-
+#define THREADHOLD_T 0.8
 using namespace std;
 // using namespace cv;
 
 const unsigned int nBlocks = 10 ;
 const unsigned int WHICH_GPU = 0;
-const unsigned int nTimes =20;
+const unsigned int nTimes =2;
 
 void roomInitialization(Room* m_room);
 void generate_suggestions();
@@ -62,7 +62,9 @@ float density_function(float beta, float cost) {
 	return exp2f(-beta * cost);
 }
 __device__
-void cost_function(){}
+float cost_function(int startAddr){
+    return .0f;
+}
 __device__
 float get_randomNum(unsigned int seed, int maxLimit) {
   /* CUDA's random number library uses curandState_t to keep track of the seed value
@@ -93,10 +95,43 @@ void changeTemparature(float * temparature, unsigned int seed){
     temparature[t1] = temparature[t2];
     temparature[t2] = tmp;
 }
+__device__
+void randomly_perturb(){
 
+}
+__device__
+void restoreOrigin(){
+
+}
+__device__
+void getTemporalTransAndRot(){
+
+}
 __device__
 void Metropolis_Hastings(int* pickedIdAddr, float* costList, float* temparature, unsigned int seed){
+    int consStartAddr = 11 * blockIdx.x;
+    float cpost, p0,p1, alpha;
+    float cpre = cost_function(consStartAddr);
+    costList[blockIdx.x] = cpre;
 
+    for(int nt = 0; nt<nTimes; nt++){
+        if(pickedIdAddr[nt] == threadIdx.x){
+            if(nt % 10 == 0)
+                changeTemparature(temparature, seed+blockIdx.x);
+            p0 = density_function(temparature[blockIdx.x], cpre);
+            randomly_perturb(/*original keep sth to restore*/);
+            cpost = cost_function(consStartAddr);
+            p1 = density_function(temparature[blockIdx.x], cpost);
+            alpha = fminf(1.0f, p1/p0);
+            if(alpha > THREADHOLD_T)
+                restoreOrigin();
+            else if(cpost < costList[blockIdx.x]){
+                getTemporalTransAndRot();
+                costList[blockIdx.x] = cpost;
+                cpre = cpost;
+            }
+        }
+    }
 }
 __global__
 void Do_Metropolis_Hastings(int * pickedIdxs, unsigned int seed){
@@ -106,7 +141,7 @@ void Do_Metropolis_Hastings(int * pickedIdxs, unsigned int seed){
 
 	temparature[blockIdx.x] = -get_randomNum(seed+blockIdx.x, 100) / 10;
 	int* pickedIdAddr = &pickedIdxs[blockIdx.x * nTimes];
-    // Metropolis_Hastings(pickedIdAddr, costList, temparature, seed);
+    Metropolis_Hastings(pickedIdAddr, costList, temparature, seed);
 	__syncthreads();
 
 }

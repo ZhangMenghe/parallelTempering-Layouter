@@ -9,6 +9,7 @@
 #define MAX_SUPPORT_TYPE 10
 #define MAX_GROUP_ALLOW 2
 #define CONSTRAIN_PAIRS 2
+#define WEIGHT_NUM 11
 
 #define PersonSize 40//40cm x 40 cm
 #define BEDSIDE_DIST 91//currently not considered

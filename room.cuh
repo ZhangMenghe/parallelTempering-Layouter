@@ -106,5 +106,6 @@ public:
 	__device__ float get_nearest_wall_dist(singleObj * obj);
 	void update_mask_by_object(const singleObj* obj, unsigned char * target, float movex = -1, float movey=-1);
     void update_furniture_mask();
+	__device__ void getResTransRot();
 };
 #endif
