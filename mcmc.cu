@@ -7,19 +7,22 @@
 #include <algorithm>
 // #include "predefinedConstrains.h"
 #include "room.cuh"
+#include <time.h>
 #define RES_NUM 1
 #define THREADHOLD_T 0.8
 using namespace std;
 // using namespace cv;
 
-const unsigned int nBlocks = 10 ;
+const unsigned int nBlocks = 3;
+const unsigned int nThreads = 16;
 const unsigned int WHICH_GPU = 0;
-const unsigned int nTimes =2;
+const unsigned int nTimes =1;
 
 void roomInitialization(Room* m_room);
 void generate_suggestions();
 extern __shared__ singleObj sObjs[];
 extern __shared__ float sFloats[];
+
 __device__ __managed__ Room* room;
 __device__ __managed__ float weights[11]={1.0f};
 __device__ __managed__ float resTransAndRot[RES_NUM * 4];
@@ -51,8 +54,15 @@ void startToProcess(Room * m_room){
 	roomInitialization(m_room);
 
 	// layout->initial_assignment(m_room);
-    debugCaller();
+    //debugCaller();
+    clock_t start, finish;
+float costtime;
+start = clock();
+
 	generate_suggestions();
+    finish = clock();
+    costtime = (float)(finish - start) / CLOCKS_PER_SEC;
+    cout<<"Runtime: "<<costtime<<endl;
    // 	// layout->display_suggestions();
 }
 
@@ -67,6 +77,7 @@ float cost_function(int startAddr){
     room->get_constrainTerms(&sFloats[startAddr]);
     for(int i=0; i<WEIGHT_NUM; i++)
         cost +=weights[i] * sFloats[startAddr + i];
+    __syncthreads();
     return cost;
 }
 __device__
@@ -111,27 +122,59 @@ __device__
 void getTemporalTransAndRot(){
 
 }
+__device__ float debug_cost_function(int startId, float * mcostList){
+    float res=0;
+    for(int i=0;i<nThreads;i++)
+        res+=mcostList[i];
+    return res;
+}
+__device__ void debug_multhread(float* costList){
+    int index = blockIdx.x * nThreads + threadIdx.x;
+    costList[index] = threadIdx.x;
+    // float cost = debug_cost_function(0,&costList[blockIdx.x * nThreads]);
+    // __syncthreads();
+    printf("%d - %d -%f\n",blockIdx.x, threadIdx.x, costList[index]);
+     __syncthreads();
+     float test =  debug_cost_function(0, &costList[blockIdx.x * nThreads]);
+     printf("%f\n",test );
+}
+
+__device__ float getWeightedCost(float* costList, int startId){
+    costList[threadIdx.x] = threadIdx.x;//should be get constrainFactor from room;
+    __syncthreads();
+    float res = 0;
+    for(int i=0; i<WEIGHT_NUM; i++)
+        res += weights[i] * costList[startId + i];
+    return res;
+}
 __device__
 void Metropolis_Hastings(int* pickedIdAddr, float* costList, float* temparature, unsigned int seed){
-    int consStartAddr = 11 * blockIdx.x;
-    float cpost, p0,p1, alpha;
-    float cpre = cost_function(consStartAddr);
-    costList[blockIdx.x] = cpre;
-
+    float cpost, p0, p1, alpha;
+    int startId = blockIdx.x * nThreads;
+    int index = startId + threadIdx.x;
+    costList[index] = 0;
+    float cpre = getWeightedCost(&costList[startId], room->objctNum);
+    //first thread cost is the best cost of block
+    costList[startId] = cpre;
     for(int nt = 0; nt<nTimes; nt++){
         if(pickedIdAddr[nt] == threadIdx.x){
             if(nt % 10 == 0)
                 changeTemparature(temparature, seed+blockIdx.x);
             p0 = density_function(temparature[blockIdx.x], cpre);
             randomly_perturb(/*original keep sth to restore*/);
-            cpost = cost_function(consStartAddr);
+        }
+        __syncthreads();
+        cpost = getWeightedCost(costList, startId);
+        costList[index] = 0;
+        //per block operation
+        if(pickedIdAddr[nt] == threadIdx.x){
             p1 = density_function(temparature[blockIdx.x], cpost);
             alpha = fminf(1.0f, p1/p0);
             if(alpha > THREADHOLD_T)
                 restoreOrigin();
             else if(cpost < costList[blockIdx.x]){
                 getTemporalTransAndRot();
-                costList[blockIdx.x] = cpost;
+                costList[startId] = cpost;
                 cpre = cpost;
             }
         }
@@ -139,20 +182,22 @@ void Metropolis_Hastings(int* pickedIdAddr, float* costList, float* temparature,
 }
 __global__
 void Do_Metropolis_Hastings(int * pickedIdxs, unsigned int seed){
-    float* constrainParams = sFloats;
-	float* costList = (float *) & constrainParams[nBlocks * 11];
-    float* temparature = (float *) & costList[nBlocks];
+	float* costList = sFloats;
+    float* temparature = (float *) & costList[nBlocks * nThreads];
 
 	temparature[blockIdx.x] = -get_randomNum(seed+blockIdx.x, 100) / 10;
-	int* pickedIdAddr = &pickedIdxs[blockIdx.x * nTimes];
+    int* pickedIdAddr = &pickedIdxs[blockIdx.x * nTimes];
+    // debug_multhread(costList);
     Metropolis_Hastings(pickedIdAddr, costList, temparature, seed);
 	__syncthreads();
 
 }
 __global__
-void AssignFurnitures(){
-	int index = blockIdx.x * blockDim.x + threadIdx.x;
-	sObjs[index] = room->deviceObjs[threadIdx.x];
+void AssignFurnitures(int objNum){
+    if(threadIdx.x<objNum){
+        int index = blockIdx.x * objNum + threadIdx.x;
+        sObjs[index] = room->deviceObjs[threadIdx.x];
+    }
 	__syncthreads();
 }
 
@@ -181,11 +226,12 @@ void generate_suggestions(){
 	//obj +  temparing + room + weight
 	// int sharedMem = nBlocks * (sizeof(room->objects)+ 2*sizeof(float)+ sizeof(*room) + sizeof(*deviceWeights));
 	int objMem = nBlocks * room->objctNum * sizeof(singleObj);
-	int floatMem = 13 * nBlocks * sizeof(float);
-
-	AssignFurnitures<<<nBlocks, room->objctNum, objMem>>>();
+	int floatMem = (1+nThreads) * nBlocks * sizeof(float);
+    cout<<"assign begin"<<endl;
+	AssignFurnitures<<<nBlocks, nThreads, objMem>>>(room->objctNum);
 	cudaDeviceSynchronize();
-	Do_Metropolis_Hastings<<<nBlocks, room->objctNum, floatMem>>>(pickedIdxs, time(NULL));
+    cout<<"assign done"<<endl;
+	Do_Metropolis_Hastings<<<nBlocks, nThreads, floatMem>>>(pickedIdxs, time(NULL));
 	cudaDeviceSynchronize();
 
     room->freeMem();

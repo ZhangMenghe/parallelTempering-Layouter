@@ -62,6 +62,34 @@ private:
     void init_an_object(vector<float>params, bool isFixed = false, bool isPrevious = false);
     void set_pairwise_map();
     void update_mask_by_wall(const wall* wal);
+
+	float t(float d, float m, float M, int a = 2);
+	void get_all_reflection(map<int, Vec3f> focalPoint_map, vector<Vec3f> &reflectTranslate, vector<float> & reflectZrot, float refk= INFINITY);
+	void get_pairwise_relation(const singleObj& obj1, const singleObj& obj2, int&pfg, float&m, float&M, int & wallRelId);
+	//Clearance :
+	//Mcv(I) that minimize the overlap between furniture(with space)
+	void cal_clearance_violation(float& mcv);
+	//Circulation:
+	//Mci support circulation through the room and access to all of the furniture.
+	//Compute free configuration space of a person on the ground plane of the room
+	//represent a person with radius = 18
+	void cal_circulation_term(float& mci);
+	//Pairwise relationships:
+	//Mpd: for example  coffee table and seat
+	//mpa: relative direction constraints
+	void cal_pairwise_relationship(float& mpd, float& mpa);
+	//Conversation
+	//Mcd:group a collection of furniture items into a conversation area
+	void cal_conversation_term(float& mcd, float& mca);
+	//balance:
+	//place the mean of the distribution of visual weight at the center of the composition
+	void cal_balance_term(float &mvb);
+	//Alignment:
+	//compute furniture alignment term
+	void cal_alignment_term(float& mfa, float&mwa);
+	//Emphasis:
+	//compute focal center
+	void cal_emphasis_term(float& mef, float& msy, float gamma = 1);
 public:
     bool initialized;
 	float center[3];
@@ -106,7 +134,7 @@ public:
 	__device__ float get_nearest_wall_dist(singleObj * obj);
 	void update_mask_by_object(const singleObj* obj, unsigned char * target, float movex = -1, float movey=-1);
     void update_furniture_mask();
-	
+
 	// TODO:Calculate constrains
 	__device__ void get_constrainTerms(float* constrains){
 		for(int i=0;i<WEIGHT_NUM;i++)
