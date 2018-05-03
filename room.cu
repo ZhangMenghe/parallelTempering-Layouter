@@ -100,6 +100,8 @@ void Room::RoomCopy(const Room & m_room){
 	colCount = m_room.colCount;
 	rowCount = m_room.rowCount;
 	cudaMemcpy(freeObjIds, m_room.freeObjIds, freeObjNum* sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(groupMap, m_room.groupMap, MAX_GROUP_ALLOW* sizeof(groupMapStruct), cudaMemcpyHostToDevice);
+	cudaMemcpy(pairMap, m_room.pairMap, CONSTRAIN_PAIRS* sizeof(pairMapStruct), cudaMemcpyHostToDevice);
 	cudaMallocManaged(&deviceObjs,  objctNum * sizeof(singleObj));
 	for(int i=0; i<objctNum; i++)
 		deviceObjs[i] = m_room.objects[i];
@@ -113,7 +115,7 @@ void Room::RoomCopy(const Room & m_room){
 	cudaMallocManaged(&furnitureMask_initial, tMem);
 	cudaMemcpy(furnitureMask, m_room.furnitureMask, tMem, cudaMemcpyHostToDevice);
 	cudaMemcpy(furnitureMask_initial, m_room.furnitureMask_initial, tMem, cudaMemcpyHostToDevice);
-	//TODO:map..obstacle
+	//TODO:obstacle
 }
 void Room::freeMem(){
 	cudaFree(deviceObjs);
@@ -181,11 +183,8 @@ void Room::add_an_object(vector<float> params, bool isPrevious, bool isFixed) {
 void Room::add_a_focal_point(vector<float> fp) {
 	int groupId = (fp.size() == 3)? 0:fp[3];
 	for(int i=0; i<groupNum; i++){
-		if(groupId == groupMap[i].gid){
+		if(groupId == groupMap[i].gid)
 			copy(fp.begin(), fp.begin()+3, groupMap[i].focal);
-			// printf("group: %d, %f - %f - %f", groupId, fp[0], fp[1], fp[2]);
-		}
-
 	}
 }
 
