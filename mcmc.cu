@@ -18,7 +18,6 @@ const unsigned int nThreads = 16;
 const unsigned int WHICH_GPU = 0;
 const unsigned int nTimes =1;
 
-void roomInitialization(Room* m_room);
 void generate_suggestions();
 extern __shared__ singleObj sObjs[];
 extern __shared__ float sFloats[];
@@ -49,17 +48,17 @@ void debugCaller(){
     // room->get_nearest_wall_dist(&room->deviceObjs[0]);
 }
 void startToProcess(Room * m_room){
-	//cout<<"hello from mcmc"<<endl;
 	setUpDevices();
-	roomInitialization(m_room);
+    cudaMallocManaged(&room,  sizeof(Room));
+    room->RoomCopy(*m_room);
 
-	// layout->initial_assignment(m_room);
     //debugCaller();
     clock_t start, finish;
-float costtime;
-start = clock();
+    float costtime;
+    start = clock();
 
 	generate_suggestions();
+
     finish = clock();
     costtime = (float)(finish - start) / CLOCKS_PER_SEC;
     cout<<"Runtime: "<<costtime<<endl;
@@ -71,15 +70,7 @@ float density_function(float beta, float cost) {
     // printf("%f-%f\n", beta, cost);
 	return exp2f(-beta * cost);
 }
-__device__
-float cost_function(int startAddr){
-    float cost = 0;
-    room->get_constrainTerms(&sFloats[startAddr]);
-    for(int i=0; i<WEIGHT_NUM; i++)
-        cost +=weights[i] * sFloats[startAddr + i];
-    __syncthreads();
-    return cost;
-}
+
 __device__
 float get_randomNum(unsigned int seed, int maxLimit) {
   /* CUDA's random number library uses curandState_t to keep track of the seed value
@@ -103,7 +94,7 @@ float get_randomNum(unsigned int seed, int maxLimit) {
 __device__
 void changeTemparature(float * temparature, unsigned int seed){
     int t1 = get_randomNum(seed, nBlocks);
-    int t2=t1;
+    int t2 = t1;
     while(t2 == t1)
         t2 = get_randomNum(seed + 100, nBlocks);
     float tmp = temparature[t1];
@@ -122,29 +113,14 @@ __device__
 void getTemporalTransAndRot(){
 
 }
-__device__ float debug_cost_function(int startId, float * mcostList){
-    float res=0;
-    for(int i=0;i<nThreads;i++)
-        res+=mcostList[i];
-    return res;
-}
-__device__ void debug_multhread(float* costList){
-    int index = blockIdx.x * nThreads + threadIdx.x;
-    costList[index] = threadIdx.x;
-    // float cost = debug_cost_function(0,&costList[blockIdx.x * nThreads]);
-    // __syncthreads();
-    printf("%d - %d -%f\n",blockIdx.x, threadIdx.x, costList[index]);
-     __syncthreads();
-     float test =  debug_cost_function(0, &costList[blockIdx.x * nThreads]);
-     printf("%f\n",test );
-}
 
-__device__ float getWeightedCost(float* costList, int startId){
+__device__
+float getWeightedCost(float* costList, int consStartId){
     costList[threadIdx.x] = threadIdx.x;//should be get constrainFactor from room;
     __syncthreads();
     float res = 0;
     for(int i=0; i<WEIGHT_NUM; i++)
-        res += weights[i] * costList[startId + i];
+        res += weights[i] * costList[consStartId + i];
     return res;
 }
 __device__
@@ -187,7 +163,6 @@ void Do_Metropolis_Hastings(int * pickedIdxs, unsigned int seed){
 
 	temparature[blockIdx.x] = -get_randomNum(seed+blockIdx.x, 100) / 10;
     int* pickedIdAddr = &pickedIdxs[blockIdx.x * nTimes];
-    // debug_multhread(costList);
     Metropolis_Hastings(pickedIdAddr, costList, temparature, seed);
 	__syncthreads();
 
@@ -199,13 +174,6 @@ void AssignFurnitures(int objNum){
         sObjs[index] = room->deviceObjs[threadIdx.x];
     }
 	__syncthreads();
-}
-
-
-
-void roomInitialization(Room* m_room){
-	cudaMallocManaged(&room,  sizeof(Room));
-	room->RoomCopy(*m_room);
 }
 
 
