@@ -63,7 +63,11 @@ float density_function(float beta, float cost) {
 }
 __device__
 float cost_function(int startAddr){
-    return .0f;
+    float cost = 0;
+    room->get_constrainTerms(&sFloats[startAddr]);
+    for(int i=0; i<WEIGHT_NUM; i++)
+        cost +=weights[i] * sFloats[startAddr + i];
+    return cost;
 }
 __device__
 float get_randomNum(unsigned int seed, int maxLimit) {

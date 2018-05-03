@@ -106,6 +106,11 @@ public:
 	__device__ float get_nearest_wall_dist(singleObj * obj);
 	void update_mask_by_object(const singleObj* obj, unsigned char * target, float movex = -1, float movey=-1);
     void update_furniture_mask();
-	__device__ void getResTransRot();
+	
+	// TODO:Calculate constrains
+	__device__ void get_constrainTerms(float* constrains){
+		for(int i=0;i<WEIGHT_NUM;i++)
+			constrains[i] = 1.0f;
+	}
 };
 #endif
