@@ -138,14 +138,24 @@ void Metropolis_Hastings(float* costList, float* temparature, unsigned int seed)
 __global__
 void Do_Metropolis_Hastings(sharedWrapper *gWrapper, unsigned int seed){
     sWrapper[0] = *gWrapper;
-    printf("wall : %d\n",sWrapper[0].wRoom->wallNum);
-
-	float* costList = sWrapper[0].wFloats;
+    if(blockIdx.x !=0 ){
+        if(threadIdx.x < sWrapper[0].wRoom->objctNum){
+            int objId = blockIdx.x * sWrapper[0].wRoom->objctNum + threadIdx.x;
+            sWrapper[0].wObjs[objId] = sWrapper[0].wObjs[threadIdx.x];
+        }
+        //can be optimized
+        if(threadIdx.x == 0){
+            int n =sWrapper[0].wRoom->colCount * sWrapper[0].wRoom->rowCount;
+            for(int i=0;i<n;i++)
+                sWrapper[0].wMask[blockIdx.x *n + i] = sWrapper[0].wMask[i];
+        }
+    }
+    float* costList = sWrapper[0].wFloats;
     float* temparature = (float *) & costList[nBlocks * nThreads];
     int* pickedIdxs = (int *)& temparature[nBlocks];
 	temparature[blockIdx.x] = -get_randomNum(seed+blockIdx.x, 100) / 10;
     pickedIdxs[blockIdx.x] = int(get_randomNum(seed+blockIdx.x, sWrapper[0].wRoom->objctNum));
-    printf("picked: %d\n",  sWrapper[0].wRoom->objctNum);
+    // printf("picked: %d\n",  sWrapper[0].wRoom->objctNum);
     // Metropolis_Hastings(costList, temparature, seed);
     __syncthreads();
 }
@@ -159,12 +169,12 @@ void generate_suggestions(Room * m_room){
     cudaMallocManaged(&gWrapper->wRoom, sizeof(sharedRoom));
     m_room->CopyToSharedRoom(gWrapper->wRoom);
 
-    int objMem = m_room->objctNum * sizeof(singleObj);
-    cudaMallocManaged(&gWrapper->wObjs,  m_room->objctNum * sizeof(singleObj));
+    int objMem = nBlocks *m_room->objctNum * sizeof(singleObj);
+    cudaMallocManaged(&gWrapper->wObjs, objMem);
 	for(int i=0; i<m_room->objctNum; i++)
 		gWrapper->wObjs[i] = m_room->objects[i];
 
-    int tMem = m_room->colCount * m_room->rowCount * sizeof(unsigned char);
+    int tMem = nBlocks *m_room->colCount * m_room->rowCount * sizeof(unsigned char);
     cudaMallocManaged(&gWrapper->wMask, tMem);
     cudaMemcpy(gWrapper->wMask, m_room->furnitureMask, tMem, cudaMemcpyHostToDevice);
 
