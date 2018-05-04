@@ -87,35 +87,31 @@ void Room::update_mask_by_wall(const wall* wal) {
 
 
 
-Room::Room(const Room & m_room){
-	objctNum = m_room.objctNum;
-	wallNum = m_room.wallNum;
-	freeObjNum = m_room.freeObjNum;
-	half_width = m_room.half_width;
-	half_height = m_room.half_height;
-	indepenFurArea = m_room.indepenFurArea;
-	obstacleArea = m_room.obstacleArea;
-	wallArea = m_room.wallArea;
-	overlappingThreshold = m_room.overlappingThreshold;
-	colCount = m_room.colCount;
-	rowCount = m_room.rowCount;
-	cudaMemcpy(freeObjIds, m_room.freeObjIds, freeObjNum* sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(groupMap, m_room.groupMap, MAX_GROUP_ALLOW* sizeof(groupMapStruct), cudaMemcpyHostToDevice);
-	cudaMemcpy(pairMap, m_room.pairMap, CONSTRAIN_PAIRS* sizeof(pairMapStruct), cudaMemcpyHostToDevice);
-	cudaMallocManaged(&deviceObjs,  objctNum * sizeof(singleObj));
-	for(int i=0; i<objctNum; i++)
-		deviceObjs[i] = m_room.objects[i];
-
-	cudaMallocManaged(&deviceWalls,  wallNum * sizeof(wall));
-	for(int i=0; i<wallNum; i++)
-		deviceWalls[i] = m_room.walls[i];
-
-	int tMem = colCount*rowCount * sizeof(unsigned char);
-	cudaMallocManaged(&furnitureMask, tMem);
-	cudaMallocManaged(&furnitureMask_initial, tMem);
-	cudaMemcpy(furnitureMask, m_room.furnitureMask, tMem, cudaMemcpyHostToDevice);
-	cudaMemcpy(furnitureMask_initial, m_room.furnitureMask_initial, tMem, cudaMemcpyHostToDevice);
-	//TODO:obstacle
+void Room::CopyToSharedRoom(sharedRoom *m_room){
+	m_room->objctNum = objctNum;
+	m_room->wallNum = wallNum;
+	m_room->freeObjNum = freeObjNum;
+	m_room->half_width = half_width;
+	m_room->half_height = half_height;
+	m_room->indepenFurArea = indepenFurArea;
+	m_room->obstacleArea = obstacleArea;
+	m_room->wallArea = wallArea;
+	m_room->overlappingThreshold = overlappingThreshold;
+	m_room->colCount = colCount;
+	m_room->rowCount = rowCount;
+	cudaMemcpy(m_room->freeObjIds, freeObjIds, freeObjNum* sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(m_room->groupMap, groupMap, MAX_GROUP_ALLOW* sizeof(groupMapStruct), cudaMemcpyHostToDevice);
+	cudaMemcpy(m_room->pairMap, pairMap, CONSTRAIN_PAIRS* sizeof(pairMapStruct), cudaMemcpyHostToDevice);
+	for(int i=0;i<wallNum;i++)
+		m_room->deviceWalls[i] = walls[i];
+	//
+	//
+	// int tMem = colCount*rowCount * sizeof(unsigned char);
+	// cudaMallocManaged(&furnitureMask, tMem);
+	// cudaMallocManaged(&furnitureMask_initial, tMem);
+	// cudaMemcpy(furnitureMask, m_room->furnitureMask, tMem, cudaMemcpyHostToDevice);
+	// cudaMemcpy(furnitureMask_initial, m_room->furnitureMask_initial, tMem, cudaMemcpyHostToDevice);
+	// //TODO:obstacle
 }
 void Room::freeMem(){
 	cudaFree(deviceObjs);
@@ -255,7 +251,36 @@ void Room::update_mask_by_object(const singleObj* obj, unsigned char * target, f
 void Room::update_furniture_mask(){
 	//TODO: DON'T KNOW....
 }
-
+__device__
+void Room::get_constrainTerms(float* costList, int weightTerm){
+	//float costList[16];
+	switch (weightTerm) {
+		case 0://mcv
+			cal_clearance_violation(costList[threadIdx.x]);
+			break;
+		case 1://Mci
+			cal_circulation_term(costList[threadIdx.x]);
+			break;
+		case 2:
+			cal_pairwise_relationship(costList[threadIdx.x], costList[threadIdx.x + 1]);
+			break;
+		case 3:
+			cal_conversation_term(costList[threadIdx.x+1], costList[threadIdx.x+2]);
+			break;
+		case 4:
+			cal_balance_term(costList[threadIdx.x+2]);
+			break;
+		case 5:
+			if(wallNum != 0)
+				cal_alignment_term(costList[threadIdx.x+2], costList[threadIdx.x+3]);
+			break;
+		case 6:
+			cal_emphasis_term(costList[threadIdx.x+3],costList[threadIdx.x+4]);
+			break;
+		default:
+			break;
+	}
+}
 
 // 	float get_single_obj_maskArea(vector<Vec2f> vertices) {
 // 		vector<vector<Point>> contours;
