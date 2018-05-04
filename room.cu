@@ -42,7 +42,7 @@ void Room::init_an_object(vector<float>params, bool isFixed, bool isPrevious) {
 	obj.isFixed = isFixed;
 	obj.alignedTheWall = (obj.catalogId == TYPE_SHELF || obj.catalogId == TYPE_BED || obj.catalogId == TYPE_TABLE) ? true : false;
 	obj.adjoinWall = (obj.catalogId == TYPE_SHELF || obj.catalogId == TYPE_BED || obj.catalogId == TYPE_TABLE) ? true : false;
-	cout<<"good2"<<endl;
+
 	// TODO: is it necessary?
 	// if (!isPrevious)//existing objs' values should be
 		// update_obj_boundingBox_and_vertices(obj, 0);
@@ -60,12 +60,12 @@ void Room::init_an_object(vector<float>params, bool isFixed, bool isPrevious) {
 		groupMap[groupNum].objIds[0] = obj.id;
 		groupNum++;
 	}
-	cout<<"good3"<<endl;
+
 	objects.push_back(obj);
 	objctNum++;
 	if (!isFixed)
 		freeObjIds[freeObjNum++] = obj.id;
-	cout<<"goodfinal"<<endl;
+
 	// else
 	// 	update_mask_by_object(&obj, furnitureMask_initial);//is a fixed object
 }
@@ -171,7 +171,7 @@ void Room::add_an_object(vector<float> params, bool isPrevious, bool isFixed) {
 	//default groupid is 0
 	if(params.size()<16)
 		params.push_back(0);
-	cout<<"good"<<endl;
+
 	init_an_object(params, isFixed, isPrevious);
 }
 void Room::add_a_focal_point(vector<float> fp) {
@@ -248,36 +248,6 @@ void Room::update_mask_by_object(const singleObj* obj, unsigned char * target, f
 }
 void Room::update_furniture_mask(){
 	//TODO: DON'T KNOW....
-}
-__device__
-void Room::get_constrainTerms(float* costList, int weightTerm){
-	//float costList[16];
-	switch (weightTerm) {
-		case 0://mcv
-			cal_clearance_violation(costList[threadIdx.x]);
-			break;
-		case 1://Mci
-			cal_circulation_term(costList[threadIdx.x]);
-			break;
-		case 2:
-			cal_pairwise_relationship(costList[threadIdx.x], costList[threadIdx.x + 1]);
-			break;
-		case 3:
-			cal_conversation_term(costList[threadIdx.x+1], costList[threadIdx.x+2]);
-			break;
-		case 4:
-			cal_balance_term(costList[threadIdx.x+2]);
-			break;
-		case 5:
-			if(wallNum != 0)
-				cal_alignment_term(costList[threadIdx.x+2], costList[threadIdx.x+3]);
-			break;
-		case 6:
-			cal_emphasis_term(costList[threadIdx.x+3],costList[threadIdx.x+4]);
-			break;
-		default:
-			break;
-	}
 }
 
 // 	float get_single_obj_maskArea(vector<Vec2f> vertices) {

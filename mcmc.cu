@@ -63,10 +63,14 @@ float get_randomNum(unsigned int seed, int maxLimit) {
 
 __device__
 void changeTemparature(float * temparature, unsigned int seed){
-    int t1 = get_randomNum(seed, nBlocks);
+    int t1 = int(get_randomNum(blockIdx.x, nBlocks+1))%nBlocks;
     int t2 = t1;
-    while(t2 == t1)
-        t2 = get_randomNum(seed + 100, nBlocks);
+    int times = 0;
+    while(t2 == t1 && times++ < 3){
+        t2 = int(get_randomNum(blockIdx.x, nBlocks+1))%nBlocks;
+    }
+    if(t2 == t1)
+        t2 = (t1+1)%nBlocks;
     float tmp = temparature[t1];
     temparature[t1] = temparature[t2];
     temparature[t2] = tmp;
@@ -83,12 +87,69 @@ __device__
 void getTemporalTransAndRot(){
 
 }
-
+__device__ float t(float d, float m, float M, int a = 2){}
+//void get_all_reflection(map<int, Vec3f> focalPoint_map, vector<Vec3f> &reflectTranslate, vector<float> & reflectZrot, float refk= INFINITY);
+__device__ void get_pairwise_relation(const singleObj& obj1, const singleObj& obj2, int&pfg, float&m, float&M, int & wallRelId){}
+//Clearance :
+//Mcv(I) that minimize the overlap between furniture(with space)
+__device__ void cal_clearance_violation(float& mcv){}
+//Circulation:
+//Mci support circulation through the room and access to all of the furniture.
+//Compute free configuration space of a person on the ground plane of the room
+//represent a person with radius = 18
+__device__ void cal_circulation_term(float& mci){}
+//Pairwise relationships:
+//Mpd: for example  coffee table and seat
+//mpa: relative direction constraints
+__device__ void cal_pairwise_relationship(float& mpd, float& mpa){}
+//Conversation
+//Mcd:group a collection of furniture items into a conversation area
+__device__ void cal_conversation_term(float& mcd, float& mca){}
+//balance:
+//place the mean of the distribution of visual weight at the center of the composition
+__device__ void cal_balance_term(float &mvb){}
+//Alignment:
+//compute furniture alignment term
+__device__ void cal_alignment_term(float& mfa, float&mwa){}
+//Emphasis:
+//compute focal center
+__device__ void cal_emphasis_term(float& mef, float& msy, float gamma = 1){}
+__device__
+void get_constrainTerms(float* costList, int weightTerm){
+	switch (weightTerm) {
+		case 0://mcv
+			cal_clearance_violation(costList[threadIdx.x]);
+			break;
+		case 1://Mci
+			cal_circulation_term(costList[threadIdx.x]);
+			break;
+		case 2:
+			cal_pairwise_relationship(costList[threadIdx.x], costList[threadIdx.x + 1]);
+			break;
+		case 3:
+			cal_conversation_term(costList[threadIdx.x+1], costList[threadIdx.x+2]);
+			break;
+		case 4:
+			cal_balance_term(costList[threadIdx.x+2]);
+			break;
+		case 5:
+			if(sWrapper[0].wRoom->wallNum != 0)
+				cal_alignment_term(costList[threadIdx.x+2], costList[threadIdx.x+3]);
+			break;
+		case 6:
+			cal_emphasis_term(costList[threadIdx.x+3],costList[threadIdx.x+4]);
+			break;
+		default:
+			break;
+	}
+}
 __device__
 float getWeightedCost(float* costList, int consStartId){
-    if(threadIdx.x > consStartId)
+    if(threadIdx.x >= consStartId){
+        get_constrainTerms(costList, threadIdx.x-consStartId);
         costList[threadIdx.x] = threadIdx.x;
-        // room->get_constrainTerms(costList, threadIdx.x - consStartId);
+    }
+
     //else do nothing, empty the first #numofObjs slots
     __syncthreads();
     float res = 0;
@@ -103,10 +164,9 @@ void Metropolis_Hastings(float* costList, float* temparature, int* pickedIdxs, u
     int startId = blockIdx.x * nThreads;
     int index = startId + threadIdx.x;
     costList[index] = 0;
-    float cpre = getWeightedCost(&costList[startId], sWrapper[0].wRoom->objctNum);
+    float cpre = 0;//getWeightedCost(&costList[startId], sWrapper[0].wRoom->objctNum);
     //first thread cost is the best cost of block
     costList[startId] = cpre;
-    printf("pre- %f\n", cpre);
     for(int nt = 0; nt<nTimes; nt++){
         if(pickedIdxs[blockIdx.x] == threadIdx.x){
             if(nt % 10 == 0)
@@ -115,10 +175,9 @@ void Metropolis_Hastings(float* costList, float* temparature, int* pickedIdxs, u
             randomly_perturb(/*original keep sth to restore*/);
         }
         __syncthreads();
+
         cpost = getWeightedCost(&costList[startId], sWrapper[0].wRoom->objctNum);
-        printf("post- %f\n", cpre);
         costList[index] = 0;
-        //per block operation
         if(pickedIdxs[blockIdx.x] == threadIdx.x){
             p1 = density_function(temparature[blockIdx.x], cpost);
             alpha = fminf(1.0f, p1/p0);
@@ -156,7 +215,7 @@ void Do_Metropolis_Hastings(sharedWrapper *gWrapper, unsigned int seed){
 	temparature[blockIdx.x] = -get_randomNum(seed+blockIdx.x, 100) / 10;
     pickedIdxs[blockIdx.x] = int(get_randomNum(seed+blockIdx.x, sWrapper[0].wRoom->objctNum));
     // printf("%d\n", pickedIdxs[blockIdx.x]);
-    //Metropolis_Hastings(costList, temparature, pickedIdxs, seed);
+    Metropolis_Hastings(costList, temparature, pickedIdxs, seed);
     __syncthreads();
 }
 
