@@ -42,7 +42,7 @@ void Room::init_an_object(vector<float>params, bool isFixed, bool isPrevious) {
 	obj.isFixed = isFixed;
 	obj.alignedTheWall = (obj.catalogId == TYPE_SHELF || obj.catalogId == TYPE_BED || obj.catalogId == TYPE_TABLE) ? true : false;
 	obj.adjoinWall = (obj.catalogId == TYPE_SHELF || obj.catalogId == TYPE_BED || obj.catalogId == TYPE_TABLE) ? true : false;
-
+	cout<<"good2"<<endl;
 	// TODO: is it necessary?
 	// if (!isPrevious)//existing objs' values should be
 		// update_obj_boundingBox_and_vertices(obj, 0);
@@ -60,13 +60,14 @@ void Room::init_an_object(vector<float>params, bool isFixed, bool isPrevious) {
 		groupMap[groupNum].objIds[0] = obj.id;
 		groupNum++;
 	}
-
+	cout<<"good3"<<endl;
 	objects.push_back(obj);
 	objctNum++;
 	if (!isFixed)
 		freeObjIds[freeObjNum++] = obj.id;
-	else
-		update_mask_by_object(&obj, furnitureMask_initial);//is a fixed object
+	cout<<"goodfinal"<<endl;
+	// else
+	// 	update_mask_by_object(&obj, furnitureMask_initial);//is a fixed object
 }
 void Room::set_pairwise_map() {
 	pairMap[0].pid = TYPE_CHAIR;
@@ -116,6 +117,7 @@ void Room::CopyToSharedRoom(sharedRoom *m_room){
 
 void Room::initialize_room(float s_width, float s_height) {
 	initialized = true;
+	groupNum = 0;
 	half_width = s_width / 2;
 	half_height = s_height / 2;
 	overlappingThreshold = s_width * s_height * 0.005;
@@ -169,6 +171,7 @@ void Room::add_an_object(vector<float> params, bool isPrevious, bool isFixed) {
 	//default groupid is 0
 	if(params.size()<16)
 		params.push_back(0);
+	cout<<"good"<<endl;
 	init_an_object(params, isFixed, isPrevious);
 }
 void Room::add_a_focal_point(vector<float> fp) {

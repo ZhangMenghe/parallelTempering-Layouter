@@ -17,14 +17,10 @@ const unsigned int nBlocks = 3;
 const unsigned int nThreads = 16;
 const unsigned int WHICH_GPU = 0;
 const unsigned int nTimes = 1;
+
 struct sharedWrapper;
 extern __shared__ sharedWrapper sWrapper[];
-// extern __shared__ sharedRoom sRoom[];
-// extern __shared__ singleObj sObjs[];
-// extern __shared__ unsigned char sMask[];
-// extern __shared__ float sFloats[];
 
-// __device__ __managed__ Room* room;
 __device__ __managed__ float weights[11]={1.0f};
 __device__ __managed__ float resTransAndRot[RES_NUM * 4];
 struct sharedWrapper{
@@ -102,26 +98,28 @@ float getWeightedCost(float* costList, int consStartId){
 }
 
 __device__
-void Metropolis_Hastings(float* costList, float* temparature, unsigned int seed){
+void Metropolis_Hastings(float* costList, float* temparature, int* pickedIdxs, unsigned int seed){
     float cpost, p0, p1, alpha;
     int startId = blockIdx.x * nThreads;
     int index = startId + threadIdx.x;
     costList[index] = 0;
-    float cpre = 0;//getWeightedCost(&costList[startId], sRoom[0].objctNum);
+    float cpre = getWeightedCost(&costList[startId], sWrapper[0].wRoom->objctNum);
     //first thread cost is the best cost of block
     costList[startId] = cpre;
+    printf("pre- %f\n", cpre);
     for(int nt = 0; nt<nTimes; nt++){
-        //if(pickedIdAddr[nt] == threadIdx.x){
+        if(pickedIdxs[blockIdx.x] == threadIdx.x){
             if(nt % 10 == 0)
                 changeTemparature(temparature, seed+blockIdx.x);
             p0 = density_function(temparature[blockIdx.x], cpre);
             randomly_perturb(/*original keep sth to restore*/);
-        //}
+        }
         __syncthreads();
-        cpost = getWeightedCost(costList, startId);
+        cpost = getWeightedCost(&costList[startId], sWrapper[0].wRoom->objctNum);
+        printf("post- %f\n", cpre);
         costList[index] = 0;
         //per block operation
-        //if(pickedIdAddr[nt] == threadIdx.x){
+        if(pickedIdxs[blockIdx.x] == threadIdx.x){
             p1 = density_function(temparature[blockIdx.x], cpost);
             alpha = fminf(1.0f, p1/p0);
             if(alpha > THREADHOLD_T)
@@ -131,7 +129,9 @@ void Metropolis_Hastings(float* costList, float* temparature, unsigned int seed)
                 costList[startId] = cpost;
                 cpre = cpost;
             }
-        //}
+            pickedIdxs[blockIdx.x] = int(get_randomNum(seed+blockIdx.x, sWrapper[0].wRoom->objctNum));
+        }
+        __syncthreads();
     }
 }
 
@@ -155,8 +155,8 @@ void Do_Metropolis_Hastings(sharedWrapper *gWrapper, unsigned int seed){
     int* pickedIdxs = (int *)& temparature[nBlocks];
 	temparature[blockIdx.x] = -get_randomNum(seed+blockIdx.x, 100) / 10;
     pickedIdxs[blockIdx.x] = int(get_randomNum(seed+blockIdx.x, sWrapper[0].wRoom->objctNum));
-    // printf("picked: %d\n",  sWrapper[0].wRoom->objctNum);
-    // Metropolis_Hastings(costList, temparature, seed);
+    // printf("%d\n", pickedIdxs[blockIdx.x]);
+    //Metropolis_Hastings(costList, temparature, pickedIdxs, seed);
     __syncthreads();
 }
 
@@ -174,8 +174,8 @@ void generate_suggestions(Room * m_room){
 	for(int i=0; i<m_room->objctNum; i++)
 		gWrapper->wObjs[i] = m_room->objects[i];
 
-    int tMem = nBlocks *m_room->colCount * m_room->rowCount * sizeof(unsigned char);
-    cudaMallocManaged(&gWrapper->wMask, tMem);
+    int tMem = m_room->colCount * m_room->rowCount * sizeof(unsigned char);
+    cudaMallocManaged(&gWrapper->wMask, nBlocks *tMem);
     cudaMemcpy(gWrapper->wMask, m_room->furnitureMask, tMem, cudaMemcpyHostToDevice);
 
 	int floatMem =  nBlocks *(2+nThreads) * sizeof(float);
@@ -221,6 +221,22 @@ void startToProcess(Room * m_room){
     finish = clock();
     costtime = (float)(finish - start) / CLOCKS_PER_SEC;
     cout<<"Runtime: "<<costtime<<endl;
+}
+void setupDebugRoom(Room* room){
+    float wallParam1[] = {-200, 150, 200, 150};
+    float wallParam2[] = {-200, -150, 200, -150};
+    float objParam[] = {0, 0, 100, 50, 0, 0, 10};
+    float fpParam[] = {0, 150, 0};
+    float mWeights[] = {1, 1.0, 3.0, 2.0, 1.0, 1.0, 1.0, 3.0, 3.0, 1.0, 0.5};
+
+    room->initialize_room();
+    room->add_a_wall(vector<float>(wallParam1,wallParam1 + 4));
+    room->add_a_wall(vector<float>(wallParam2,wallParam2 + 4));
+    room->add_an_object(vector<float>(objParam,objParam + 7));
+    room->add_a_focal_point(vector<float>(fpParam,fpParam + 3));
+
+    for(int i=0;i<11;i++)
+        weights[i] = mWeights[i];
 }
 void parser_inputfile(const char* filename, Room * parser_inputfile) {
 	ifstream instream(filename);
@@ -294,9 +310,10 @@ int main(int argc, char** argv){
 	int r = strcpy_s(filename, 100, "E:/layoutParam.txt");
 	r = strcpy_s(existance_file, 100, "E:/fixedObj.txt");
 	Room* parserRoom = new Room();
-	parser_inputfile(filename, parserRoom);
+    setupDebugRoom(parserRoom);
+	// parser_inputfile(filename, parserRoom);
 	// parser_inputfile(existance_file, room, weights);
-	if (parserRoom != nullptr && (parserRoom->objctNum != 0 || parserRoom->wallNum != 0))
-        startToProcess(parserRoom);
+	// if (parserRoom != nullptr && (parserRoom->objctNum != 0 || parserRoom->wallNum != 0))
+    startToProcess(parserRoom);
 	return 0;
 }
