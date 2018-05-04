@@ -132,8 +132,6 @@ public:
         initialized = false;
 
     }
-	Room(const Room & m_room);
-	void freeMem();
     void initialize_room(float s_width = 800.0f, float s_height = 600.0f);
     void add_a_wall(vector<float> params);
     void add_an_object(vector<float> params, bool isPrevious = false, bool isFixed = false);

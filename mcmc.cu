@@ -12,14 +12,11 @@
 #define THREADHOLD_T 0.8
 #define MAX_THREAD_NUM 64
 using namespace std;
-// using namespace cv;
 
 const unsigned int nBlocks = 3;
-//const unsigned int nThreads = 16;
+const unsigned int nThreads = 16;
 const unsigned int WHICH_GPU = 0;
 const unsigned int nTimes =1;
-
-void generate_suggestions();
 
 extern __shared__ sharedRoom sRoom[];
 extern __shared__ singleObj sObjs[];
@@ -46,22 +43,19 @@ void setUpDevices(){
     cudaGetDevice(&wgpu);
     cudaDeviceReset();
 }
-// void debugCaller(){
-//     room->set_obj_zrotation(&room->deviceObjs[0], PI);
-//     room->set_obj_translation(&room->deviceObjs[0], -50, 0);
-//     // room->get_nearest_wall_dist(&room->deviceObjs[0]);
-// }
 
 __global__
 void AssignRoom(sharedRoom *gRoom){
     sRoom[0] = *gRoom;
 }
+
 __global__
 void AssignFurnitures(singleObj * gdeviceObjs){
     int index = blockIdx.x * blockDim.x + threadIdx.x;
     sObjs[index] = gdeviceObjs[threadIdx.x];
 	__syncthreads();
 }
+
 __global__
 void AssignMasks(unsigned char* gfurnitureMask, int n){
     for(int i=0;i<n;i++)
@@ -84,30 +78,20 @@ void InitializeSharedMem(Room * m_room){
     AssignFurnitures<<<nBlocks, gRoom->objctNum, objMem>>>(gdeviceObjs);
     cudaDeviceSynchronize();
 
+    //TODO:CAN BE OPTIMIZED BY THREADNUM
     unsigned char* gfurnitureMask;
     int tMem = gRoom->colCount * gRoom->rowCount * sizeof(unsigned char);
     cudaMallocManaged(&gfurnitureMask, tMem);
     cudaMemcpy(gfurnitureMask, m_room->furnitureMask, tMem, cudaMemcpyHostToDevice);
     AssignMasks<<<nBlocks, 1, nBlocks * tMem>>>(gfurnitureMask, gRoom->colCount * gRoom->rowCount);
     cudaDeviceSynchronize();
-}
-void startToProcess(Room * m_room){
-    if(m_room->objctNum == 0)
-        return;
-	setUpDevices();
-    InitializeSharedMem(m_room);
-    //debugCaller();
-    clock_t start, finish;
-    float costtime;
-    start = clock();
 
-	generate_suggestions();
-
-    finish = clock();
-    costtime = (float)(finish - start) / CLOCKS_PER_SEC;
-    cout<<"Runtime: "<<costtime<<endl;
-   // 	// layout->display_suggestions();
+    cudaFree(gRoom);
+    cudaFree(gdeviceObjs);
+    cudaFree(gfurnitureMask);
 }
+
+
 
 // __device__
 // float density_function(float beta, float cost) {
@@ -115,26 +99,15 @@ void startToProcess(Room * m_room){
 // 	return exp2f(-beta * cost);
 // }
 //
-// __device__
-// float get_randomNum(unsigned int seed, int maxLimit) {
-//   /* CUDA's random number library uses curandState_t to keep track of the seed value
-//      we will store a random state for every thread  */
-//   curandState_t state;
-//
-//   /* we have to initialize the state */
-//   curand_init(seed, /* the seed controls the sequence of random values that are produced */
-//               0, /* the sequence number is only important with multiple cores */
-//               0, /* the offset is how much extra we advance in the sequence for each call, can be 0 */
-//               &state);
-//
-//   /* curand works like rand - except that it takes a state as a parameter */
-//   return curand(&state) % maxLimit;
-//  // int res = curand(&state) % maxLimit;
-//  // printf("%d ", res);
-//  // return res;
-// }
-//
-//
+__device__
+float get_randomNum(unsigned int seed, int maxLimit) {
+  curandState_t state;
+  //seed, sequence number(multiple cores), offset
+  curand_init(seed, 0,0, &state);
+  return curand(&state) % maxLimit;
+}
+
+
 // __device__
 // void changeTemparature(float * temparature, unsigned int seed){
 //     int t1 = get_randomNum(seed, nBlocks);
@@ -205,49 +178,23 @@ void startToProcess(Room * m_room){
 //     }
 // }
 //
-// __global__
-// void Do_Metropolis_Hastings(int * pickedIdxs, unsigned int seed){
-// 	float* costList = sFloats;
-//     float* temparature = (float *) & costList[nBlocks * nThreads];
-//
-// 	temparature[blockIdx.x] = -get_randomNum(seed+blockIdx.x, 100) / 10;
-//     int* pickedIdAddr = &pickedIdxs[blockIdx.x * nTimes];
-//     Metropolis_Hastings(pickedIdAddr, costList, temparature, seed);
-// 	__syncthreads();
-//
-// }
+__global__
+void Do_Metropolis_Hastings(unsigned int seed){
+	float* costList = sFloats;
+    float* temparature = (float *) & costList[nBlocks * nThreads];
+	temparature[blockIdx.x] = -get_randomNum(seed+blockIdx.x, 100) / 10;
+    //Metropolis_Hastings(costList, temparature, seed);
+    __syncthreads();
+}
 
 
 
 void generate_suggestions(){
-    int * pickedIdxs; //should be in global mem
-    cudaMallocManaged(&pickedIdxs, nBlocks * nTimes * sizeof(int));
-    //block1.....block2....
-    for(int i=0; i<nBlocks*nTimes; i++)
-        pickedIdxs[i] = rand()%1;
-
     //dynamic shared mem, <<<nb, nt, sm>>>
-	// int objMem = nBlocks * room->objctNum * sizeof(singleObj);
-	//int floatMem = (1+nThreads) * nBlocks * sizeof(float);
-    // cout<<"assign begin"<<endl;
-	// AssignFurnitures<<<nBlocks, room->objctNum, objMem>>>();
-	// cudaDeviceSynchronize();
-    // cout<<"assign done"<<endl;
-
-	// Do_Metropolis_Hastings<<<nBlocks, nThreads, floatMem>>>(pickedIdxs, time(NULL));
-	//cudaDeviceSynchronize();
-    //cout<<"assign room done"<<endl;
-    // room->freeMem();
-	cudaFree(pickedIdxs);
-	// cudaFree(room);
-
-
-    // for(int i=0;i<nBlocks;i++){
-    //     // for(int j=0; j<numofObjs; j++)
-    //         cout<<rArray[i]<<" ";
-    //     cout<<endl;
-    // }
-
+    //temparature +
+	int floatMem = (1+nThreads) * nBlocks * sizeof(float);
+	Do_Metropolis_Hastings<<<nBlocks, nThreads, floatMem>>>(time(NULL));
+	cudaDeviceSynchronize();
 }
 __device__ __host__
 void random_along_wall(int furnitureID) {
@@ -265,7 +212,22 @@ void random_along_wall(int furnitureID) {
 //     room->update_furniture_mask();
 // }
 
+void startToProcess(Room * m_room){
+    if(m_room->objctNum == 0)
+        return;
+	setUpDevices();
 
+    clock_t start, finish;
+    float costtime;
+    start = clock();
+
+    InitializeSharedMem(m_room);
+	generate_suggestions();
+
+    finish = clock();
+    costtime = (float)(finish - start) / CLOCKS_PER_SEC;
+    cout<<"Runtime: "<<costtime<<endl;
+}
 void parser_inputfile(const char* filename, Room * parser_inputfile) {
 	ifstream instream(filename);
 	string str;
