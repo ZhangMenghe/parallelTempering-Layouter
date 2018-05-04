@@ -87,21 +87,47 @@ __device__
 void getTemporalTransAndRot(){
 
 }
-__device__ float t(float d, float m, float M, int a = 2){}
+__device__ float t(float d, float m, float M, int a = 2){
+    if (d < m)
+		return powf((d / m), float(a));
+	else if (d > M)
+		return powf((M / d), float(a));
+	else
+		return 1.0f;
+}
+
+//TODO:
+__device__
+int get_sum_furnitureMsk(unsigned char* mask){
+    //return furnitureMsk by different blockIdx
+    return 100*(blockIdx.x + 1);
+}
+//TODO:
 //void get_all_reflection(map<int, Vec3f> focalPoint_map, vector<Vec3f> &reflectTranslate, vector<float> & reflectZrot, float refk= INFINITY);
-__device__ void get_pairwise_relation(const singleObj& obj1, const singleObj& obj2, int&pfg, float&m, float&M, int & wallRelId){}
+__device__
+void get_pairwise_relation(const singleObj& obj1, const singleObj& obj2, int&pfg, float&m, float&M, int & wallRelId){
+
+}
 //Clearance :
 //Mcv(I) that minimize the overlap between furniture(with space)
-__device__ void cal_clearance_violation(float& mcv){}
+__device__
+void cal_clearance_violation(float& mcv){
+    float overlappingArea = get_sum_furnitureMsk(&sWrapper[0].wMask[blockIdx.x * sWrapper[0].wRoom->mskCount ]) - sWrapper[0].wRoom->obstacleArea - sWrapper[0].wRoom->wallArea;
+    mcv = sWrapper[0].wRoom->indepenFurArea - overlappingArea;
+    mcv = (mcv < 0)? 0 : mcv;
+}
 //Circulation:
 //Mci support circulation through the room and access to all of the furniture.
-//Compute free configuration space of a person on the ground plane of the room
-//represent a person with radius = 18
-__device__ void cal_circulation_term(float& mci){}
+__device__
+void cal_circulation_term(float& mci){
+    mci = 0;
+}
 //Pairwise relationships:
 //Mpd: for example  coffee table and seat
 //mpa: relative direction constraints
-__device__ void cal_pairwise_relationship(float& mpd, float& mpa){}
+__device__ void cal_pairwise_relationship(float& mpd, float& mpa){
+
+}
 //Conversation
 //Mcd:group a collection of furniture items into a conversation area
 __device__ void cal_conversation_term(float& mcd, float& mca){}
@@ -143,6 +169,7 @@ void get_constrainTerms(float* costList, int weightTerm){
 			break;
 	}
 }
+
 __device__
 float getWeightedCost(float* costList, int consStartId){
     if(threadIdx.x >= consStartId){
@@ -204,9 +231,8 @@ void Do_Metropolis_Hastings(sharedWrapper *gWrapper, unsigned int seed){
         }
         //can be optimized
         if(threadIdx.x == 0){
-            int n =sWrapper[0].wRoom->colCount * sWrapper[0].wRoom->rowCount;
-            for(int i=0;i<n;i++)
-                sWrapper[0].wMask[blockIdx.x *n + i] = sWrapper[0].wMask[i];
+            for(int i=0; i<sWrapper[0].wRoom->mskCount; i++)
+                sWrapper[0].wMask[blockIdx.x *sWrapper[0].wRoom->mskCount + i] = sWrapper[0].wMask[i];
         }
     }
     float* costList = sWrapper[0].wFloats;

@@ -100,6 +100,7 @@ void Room::CopyToSharedRoom(sharedRoom *m_room){
 	m_room->overlappingThreshold = overlappingThreshold;
 	m_room->colCount = colCount;
 	m_room->rowCount = rowCount;
+	m_room->mskCount = colCount * rowCount;
 	cudaMemcpy(m_room->freeObjIds, freeObjIds, freeObjNum* sizeof(int), cudaMemcpyHostToDevice);
 	cudaMemcpy(m_room->groupMap, groupMap, MAX_GROUP_ALLOW* sizeof(groupMapStruct), cudaMemcpyHostToDevice);
 	cudaMemcpy(m_room->pairMap, pairMap, CONSTRAIN_PAIRS* sizeof(pairMapStruct), cudaMemcpyHostToDevice);
