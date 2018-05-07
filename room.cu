@@ -117,6 +117,7 @@ void Room::CopyToSharedRoom(sharedRoom *m_room){
 	m_room->rowCount = rowCount;
 	m_room->mskCount = colCount * rowCount;
 	m_room->pairNum = actualPairs.size();
+	m_room->groupNum = groupNum;
 	m_room->RoomCenter[0] = center[0];m_room->RoomCenter[1] = center[1];m_room->RoomCenter[2] = center[2];
 	cudaMemcpy(m_room->freeObjIds, freeObjIds, freeObjNum* sizeof(int), cudaMemcpyHostToDevice);
 	cudaMemcpy(m_room->groupMap, groupMap, MAX_GROUP_ALLOW* sizeof(groupMapStruct), cudaMemcpyHostToDevice);

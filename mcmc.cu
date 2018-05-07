@@ -109,6 +109,19 @@ int get_sum_furnitureMsk(unsigned char* mask){
     //return furnitureMsk by different blockIdx
     return 100*(blockIdx.x + 1);
 }
+__device__
+float get_nearest_wall_dist(singleObj * obj, wall* deviceWalls, int wallNum) {
+	float min_dist = INFINITY, dist;
+	for (int i = 0; i < wallNum; i++) {
+		dist = fabsf(deviceWalls[i].a * obj->translation[0] + deviceWalls[i].b * obj->translation[1] + deviceWalls[i].c) / sqrtf(deviceWalls[i].a * deviceWalls[i].a + deviceWalls[i].b * deviceWalls[i].b);
+		if (dist < min_dist) {
+			min_dist = dist;
+			obj->nearestWall = i;
+		}
+	}
+	// printf("%d : %f\n", obj->nearestWall, min_dist);
+	return min_dist;
+}
 //TODO:
 //void get_all_reflection(map<int, Vec3f> focalPoint_map, vector<Vec3f> &reflectTranslate, vector<float> & reflectZrot, float refk= INFINITY);
 
@@ -131,23 +144,31 @@ void cal_circulation_term(float& mci){
 //mpa: relative direction constraints
 __device__
 void cal_pairwise_relationship(float& mpd, float& mpa, int objIndex){
+    singleObj * obj1, *obj2;
+    float cosfg2;
     for(int i=0; i<sWrapper[0].wRoom->pairNum; i++){
-        singleObj * obj1 = &sWrapper[0].wObjs[objIndex + sWrapper[0].wPairRelation[4*i]];
-        singleObj * obj2 = &sWrapper[0].wObjs[objIndex + sWrapper[0].wPairRelation[4*i+1]];
+        obj1 = &sWrapper[0].wObjs[objIndex + sWrapper[0].wPairRelation[4*i]];
+        obj2 = &sWrapper[0].wObjs[objIndex + sWrapper[0].wPairRelation[4*i+1]];
         //printf("%d - %d - %d - %d\n",blockIdx.x, threadIdx.x, obj1->id, obj2->id);
         mpd -= t(dist_between_points(obj1->translation, obj2->translation),
                 sWrapper[0].wPairRelation[4*i + 2],
                 sWrapper[0].wPairRelation[4*i + 3]);
-        float cosfg2 = powf((sinf(obj1->zrotation) * sinf(obj2->zrotation)
+        cosfg2 = powf((sinf(obj1->zrotation) * sinf(obj2->zrotation)
                     + cosf(obj1->zrotation) * cosf(obj2->zrotation)),2.0f);
         mpa -= 8 * powf(cosfg2, 2) - 8 * cosfg2;
     }
 }
 //Conversation
+//TODO: double check please
 //Mcd:group a collection of furniture items into a conversation area
 __device__
-void cal_conversation_term(float& mcd, float& mca){
-
+void cal_conversation_term(float& mcd, float& mca,int objIndexId){
+    // singleObj * obj;
+    // for(int i=0; i<sWrapper[0].wRoom->groupNum; i++){
+    //     for(int k=0; k<sWrapper[0].wRoom->groupMap[i].memNum; k++){
+    //         obj = &sWrapper[0].wObjs[objIndexId + k]
+    //     }
+    // }
 }
 //balance:
 //place the mean of the distribution of visual weight at the center of the composition
@@ -160,13 +181,30 @@ void cal_balance_term(float &mvb, int objIndexId){
         centroid[2] += sWrapper[0].wObjs[objIndexId + i].area * sWrapper[0].wObjs[objIndexId + i].translation[2];
     }
     centroid[0] /= sWrapper[0].wRoom->indepenFurArea;centroid[1] /= sWrapper[0].wRoom->indepenFurArea;centroid[2] /= sWrapper[0].wRoom->indepenFurArea;
-    printf("%f - %f - %f- %f\n", centroid[0],centroid[1],centroid[2],sWrapper[0].wRoom->indepenFurArea);
+    //printf("%f - %f - %f- %f\n", centroid[0],centroid[1],centroid[2],sWrapper[0].wRoom->indepenFurArea);
     mvb = dist_between_points(centroid, sWrapper[0].wRoom->RoomCenter);
 }
 //Alignment:
 //compute furniture alignment term
 __device__
-void cal_alignment_term(float& mfa, float&mwa){}
+void cal_alignment_term(float& mfa, float&mwa, int objIndexId){
+    singleObj * obj1, *obj2;
+    for(int i=0; i<sWrapper[0].wRoom->groupNum; i++){
+        for(int k=0; k<sWrapper[0].wRoom->groupMap[i].memNum; k++){
+            obj1 = &sWrapper[0].wObjs[objIndexId + k];
+            for(int k2 = k; k2<sWrapper[0].wRoom->groupMap[i].memNum; k2++){
+                obj2 = &sWrapper[0].wObjs[objIndexId + k2];
+                mfa -= cosf(4 * (obj1->zrotation - obj2->zrotation));
+            }
+            get_nearest_wall_dist(obj1, sWrapper[0].wRoom->deviceWalls,sWrapper[0].wRoom->wallNum);
+            if(!obj1->adjoinWall)
+                mwa -= cosf(4 * (obj1->zrotation
+                        - sWrapper[0].wRoom->deviceWalls[obj1->nearestWall].zrotation
+                        - PI/2));
+
+        }
+    }
+}
 //Emphasis:
 //compute focal center
 __device__
@@ -184,14 +222,13 @@ void get_constrainTerms(float* costList, int weightTerm, int objIndexId){
 			cal_pairwise_relationship(costList[threadIdx.x], costList[threadIdx.x + 1], objIndexId);
 			break;
 		case 3:
-			cal_conversation_term(costList[threadIdx.x+1], costList[threadIdx.x+2]);
+			cal_conversation_term(costList[threadIdx.x+1], costList[threadIdx.x+2], objIndexId);
 			break;
 		case 4:
 			cal_balance_term(costList[threadIdx.x+2], objIndexId);
 			break;
 		case 5:
-			if(sWrapper[0].wRoom->wallNum != 0)
-				cal_alignment_term(costList[threadIdx.x+2], costList[threadIdx.x+3]);
+			cal_alignment_term(costList[threadIdx.x+2], costList[threadIdx.x+3], objIndexId);
 			break;
 		case 6:
 			cal_emphasis_term(costList[threadIdx.x+3],costList[threadIdx.x+4]);

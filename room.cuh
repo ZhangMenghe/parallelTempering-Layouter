@@ -14,7 +14,7 @@ struct mRect2f{
 struct groupMapStruct{
 	int gid;
 	int memNum;
-	float focal[3] = {INFINITY, INFINITY, INFINITY};
+	float focal[3] = {INFINITY};
 	int objIds[MAX_NUM_OBJS];
 };
 struct pairMapStruct{
@@ -56,7 +56,7 @@ struct sharedRoom{
 	float overlappingThreshold;
 	float RoomCenter[3];
 	int colCount, rowCount, mskCount;
-	int pairNum;
+	int pairNum, groupNum;
 	groupMapStruct groupMap[MAX_GROUP_ALLOW];
 	pairMapStruct pairMap[CONSTRAIN_PAIRS];
 	wall deviceWalls[MAX_NUM_WALLS];
