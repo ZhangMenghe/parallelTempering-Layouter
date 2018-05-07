@@ -31,7 +31,7 @@ void Room::init_an_object(vector<float>params, bool isFixed, bool isPrevious) {
 	//vertices
 	copy(params.begin(), params.begin() + 8, obj.vertices);
 
-	obj.translation[0] = params[8];obj.translation[0] =params[9];obj.translation[0] =.0f;
+	obj.translation[0] = params[8];obj.translation[1] =params[9];obj.translation[2] =.0f;
 	obj.objWidth = params[10];
 	obj.objHeight = params[11];
 
@@ -117,6 +117,7 @@ void Room::CopyToSharedRoom(sharedRoom *m_room){
 	m_room->rowCount = rowCount;
 	m_room->mskCount = colCount * rowCount;
 	m_room->pairNum = actualPairs.size();
+	m_room->RoomCenter[0] = center[0];m_room->RoomCenter[1] = center[1];m_room->RoomCenter[2] = center[2];
 	cudaMemcpy(m_room->freeObjIds, freeObjIds, freeObjNum* sizeof(int), cudaMemcpyHostToDevice);
 	cudaMemcpy(m_room->groupMap, groupMap, MAX_GROUP_ALLOW* sizeof(groupMapStruct), cudaMemcpyHostToDevice);
 	cudaMemcpy(m_room->pairMap, pairMap, CONSTRAIN_PAIRS* sizeof(pairMapStruct), cudaMemcpyHostToDevice);

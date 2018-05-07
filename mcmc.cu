@@ -102,6 +102,7 @@ __device__
 float dist_between_points(const float* pos1, const float* pos2) {
 	return sqrtf(powf((pos1[0] - pos2[0]),2.0f) + powf((pos1[1] - pos2[1]),2.0f) +powf((pos1[2] - pos2[2]),2.0f));
 }
+
 //TODO:
 __device__
 int get_sum_furnitureMsk(unsigned char* mask){
@@ -145,11 +146,23 @@ void cal_pairwise_relationship(float& mpd, float& mpa, int objIndex){
 //Conversation
 //Mcd:group a collection of furniture items into a conversation area
 __device__
-void cal_conversation_term(float& mcd, float& mca){}
+void cal_conversation_term(float& mcd, float& mca){
+
+}
 //balance:
 //place the mean of the distribution of visual weight at the center of the composition
 __device__
-void cal_balance_term(float &mvb){}
+void cal_balance_term(float &mvb, int objIndexId){
+    float centroid[3] = {.0f};
+    for(int i=0; i<sWrapper[0].wRoom->objctNum; i++){
+        centroid[0] += sWrapper[0].wObjs[objIndexId + i].area * sWrapper[0].wObjs[objIndexId + i].translation[0];
+        centroid[1] += sWrapper[0].wObjs[objIndexId + i].area * sWrapper[0].wObjs[objIndexId + i].translation[1];
+        centroid[2] += sWrapper[0].wObjs[objIndexId + i].area * sWrapper[0].wObjs[objIndexId + i].translation[2];
+    }
+    centroid[0] /= sWrapper[0].wRoom->indepenFurArea;centroid[1] /= sWrapper[0].wRoom->indepenFurArea;centroid[2] /= sWrapper[0].wRoom->indepenFurArea;
+    printf("%f - %f - %f- %f\n", centroid[0],centroid[1],centroid[2],sWrapper[0].wRoom->indepenFurArea);
+    mvb = dist_between_points(centroid, sWrapper[0].wRoom->RoomCenter);
+}
 //Alignment:
 //compute furniture alignment term
 __device__
@@ -159,7 +172,7 @@ void cal_alignment_term(float& mfa, float&mwa){}
 __device__
 void cal_emphasis_term(float& mef, float& msy, float gamma = 1){}
 __device__
-void get_constrainTerms(float* costList, int weightTerm){
+void get_constrainTerms(float* costList, int weightTerm, int objIndexId){
 	switch (weightTerm) {
 		case 0://mcv
 			cal_clearance_violation(costList[threadIdx.x]);
@@ -168,13 +181,13 @@ void get_constrainTerms(float* costList, int weightTerm){
 			cal_circulation_term(costList[threadIdx.x]);
 			break;
 		case 2:
-			cal_pairwise_relationship(costList[threadIdx.x], costList[threadIdx.x + 1], blockIdx.x * sWrapper[0].wRoom->objctNum);
+			cal_pairwise_relationship(costList[threadIdx.x], costList[threadIdx.x + 1], objIndexId);
 			break;
 		case 3:
 			cal_conversation_term(costList[threadIdx.x+1], costList[threadIdx.x+2]);
 			break;
 		case 4:
-			cal_balance_term(costList[threadIdx.x+2]);
+			cal_balance_term(costList[threadIdx.x+2], objIndexId);
 			break;
 		case 5:
 			if(sWrapper[0].wRoom->wallNum != 0)
@@ -189,9 +202,9 @@ void get_constrainTerms(float* costList, int weightTerm){
 }
 
 __device__
-float getWeightedCost(float* costList, int consStartId){
+float getWeightedCost(float* costList, int consStartId, int objIndexId){
     if(threadIdx.x >= consStartId){
-        get_constrainTerms(costList, threadIdx.x-consStartId);
+        get_constrainTerms(costList, threadIdx.x-consStartId, objIndexId);
         costList[threadIdx.x] = threadIdx.x;
     }
 
@@ -204,12 +217,12 @@ float getWeightedCost(float* costList, int consStartId){
 }
 
 __device__
-void Metropolis_Hastings(float* costList, float* temparature, int* pickedIdxs, unsigned int seed){
+void Metropolis_Hastings(float* costList, float* temparature, int* pickedIdxs, int objIndexId, unsigned int seed){
     float cpost, p0, p1, alpha;
     int startId = blockIdx.x * nThreads;
     int index = startId + threadIdx.x;
     costList[index] = 0;
-    float cpre = getWeightedCost(&costList[startId], sWrapper[0].wRoom->objctNum);
+    float cpre = getWeightedCost(&costList[startId], sWrapper[0].wRoom->objctNum, objIndexId);
     //first thread cost is the best cost of block
     costList[startId] = cpre;
     for(int nt = 0; nt<nTimes; nt++){
@@ -221,7 +234,7 @@ void Metropolis_Hastings(float* costList, float* temparature, int* pickedIdxs, u
         }
         __syncthreads();
 
-        cpost = getWeightedCost(&costList[startId], sWrapper[0].wRoom->objctNum);
+        cpost = getWeightedCost(&costList[startId], sWrapper[0].wRoom->objctNum, objIndexId);
         costList[index] = 0;
         if(pickedIdxs[blockIdx.x] == threadIdx.x){
             p1 = density_function(temparature[blockIdx.x], cpost);
@@ -259,7 +272,7 @@ void Do_Metropolis_Hastings(sharedWrapper *gWrapper, unsigned int seed){
 	temparature[blockIdx.x] = -get_randomNum(seed+blockIdx.x, 100) / 10;
     pickedIdxs[blockIdx.x] = int(get_randomNum(seed+blockIdx.x, sWrapper[0].wRoom->objctNum));
     // printf("%d\n", pickedIdxs[blockIdx.x]);
-    Metropolis_Hastings(costList, temparature, pickedIdxs, seed);
+    Metropolis_Hastings(costList, temparature, pickedIdxs, blockIdx.x * sWrapper[0].wRoom->objctNum, seed);
     __syncthreads();
 }
 
