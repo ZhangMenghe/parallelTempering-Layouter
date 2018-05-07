@@ -82,6 +82,21 @@ void Room::set_pairwise_map() {
 	pairMap[1].minDist[0] = 0;
 	pairMap[1].maxDist[0] = 30;
 }
+void Room::set_objs_pairwise_relation(const singleObj& obj1, const singleObj& obj2){
+	const singleObj* indexObj = (obj1.catalogId <= obj2.catalogId)?&obj1:&obj2;
+	const singleObj* compObj = (obj1.id == indexObj->id)? &obj2:&obj1;
+	for(int i=0; i<CONSTRAIN_PAIRS; i++){
+		if(indexObj->catalogId == pairMap[i].pid){
+			for(int j=0; pairMap[i].objTypes[j]!=-1&&j<MAX_SUPPORT_TYPE; j++){
+				if(pairMap[i].objTypes[j] == compObj->catalogId){
+					vector<int> pair{indexObj->id, compObj->id, pairMap[i].minDist[j],  pairMap[i].maxDist[j]};
+					actualPairs.push_back(pair);
+					break;
+				}
+			}
+		}
+	}
+}
 void Room::update_mask_by_wall(const wall* wal) {
 	//TODO: DON'T KNOW HOW TO TACKLE WITH OBLIQUE WALL
 }

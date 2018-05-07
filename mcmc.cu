@@ -24,10 +24,11 @@ extern __shared__ sharedWrapper sWrapper[];
 __device__ __managed__ float weights[11]={1.0f};
 __device__ __managed__ float resTransAndRot[RES_NUM * 4];
 struct sharedWrapper{
-    sharedRoom *wRoom;
-    singleObj *wObjs;
-    unsigned char *wMask;
-    float *wFloats;
+    sharedRoom *wRoom;//1
+    singleObj *wObjs;//nblocks
+    unsigned char *wMask;//nblocks
+    float *wFloats;//1
+    int *wPairRelation;//1
 };
 void setUpDevices(){
     int deviceCount = 0;
@@ -104,8 +105,9 @@ int get_sum_furnitureMsk(unsigned char* mask){
 }
 //TODO:
 //void get_all_reflection(map<int, Vec3f> focalPoint_map, vector<Vec3f> &reflectTranslate, vector<float> & reflectZrot, float refk= INFINITY);
+//TODO: currently remove wall constrain because there are force to
 __device__
-void get_pairwise_relation(const singleObj& obj1, const singleObj& obj2, int&pfg, float&m, float&M, int & wallRelId){
+void get_pairwise_relation(const singleObj& obj1, const singleObj& obj2, int&pfg, float&m, float&M){
 
 }
 //Clearance :
@@ -125,21 +127,26 @@ void cal_circulation_term(float& mci){
 //Pairwise relationships:
 //Mpd: for example  coffee table and seat
 //mpa: relative direction constraints
-__device__ void cal_pairwise_relationship(float& mpd, float& mpa){
+__device__
+void cal_pairwise_relationship(float& mpd, float& mpa){
 
 }
 //Conversation
 //Mcd:group a collection of furniture items into a conversation area
-__device__ void cal_conversation_term(float& mcd, float& mca){}
+__device__
+void cal_conversation_term(float& mcd, float& mca){}
 //balance:
 //place the mean of the distribution of visual weight at the center of the composition
-__device__ void cal_balance_term(float &mvb){}
+__device__
+void cal_balance_term(float &mvb){}
 //Alignment:
 //compute furniture alignment term
-__device__ void cal_alignment_term(float& mfa, float&mwa){}
+__device__
+void cal_alignment_term(float& mfa, float&mwa){}
 //Emphasis:
 //compute focal center
-__device__ void cal_emphasis_term(float& mef, float& msy, float gamma = 1){}
+__device__
+void cal_emphasis_term(float& mef, float& msy, float gamma = 1){}
 __device__
 void get_constrainTerms(float* costList, int weightTerm){
 	switch (weightTerm) {
@@ -191,7 +198,7 @@ void Metropolis_Hastings(float* costList, float* temparature, int* pickedIdxs, u
     int startId = blockIdx.x * nThreads;
     int index = startId + threadIdx.x;
     costList[index] = 0;
-    float cpre = 0;//getWeightedCost(&costList[startId], sWrapper[0].wRoom->objctNum);
+    float cpre = getWeightedCost(&costList[startId], sWrapper[0].wRoom->objctNum);
     //first thread cost is the best cost of block
     costList[startId] = cpre;
     for(int nt = 0; nt<nTimes; nt++){
@@ -266,6 +273,14 @@ void generate_suggestions(Room * m_room){
 	int floatMem =  nBlocks *(2+nThreads) * sizeof(float);
     cudaMallocManaged(&gWrapper->wFloats, floatMem);
 
+    int pairMem = m_room->actualPairs.size() * 4 * sizeof(int);
+    cudaMallocManaged(&gWrapper->wPairRelation, pairMem);
+    for(int i=0;i<m_room->actualPairs.size();i++){
+        for(int j=0;j<4;j++)
+            gWrapper->wPairRelation[4*i+j]= m_room->actualPairs[i][j];
+    }
+
+
 	Do_Metropolis_Hastings<<<nBlocks, nThreads, sizeof(*gWrapper)>>>(gWrapper, time(NULL));
 	cudaDeviceSynchronize();
 
@@ -318,10 +333,16 @@ void setupDebugRoom(Room* room){
     room->add_a_wall(vector<float>(wallParam1,wallParam1 + 4));
     room->add_a_wall(vector<float>(wallParam2,wallParam2 + 4));
     room->add_an_object(vector<float>(objParam,objParam + 7));
+    room->add_an_object(vector<float>(objParam,objParam + 7));
     room->add_a_focal_point(vector<float>(fpParam,fpParam + 3));
 
     for(int i=0;i<11;i++)
         weights[i] = mWeights[i];
+    for(int i=0; i< room->objctNum-1; i++){
+        for(int j=i+1; j<room->objctNum; j++)
+            room->set_objs_pairwise_relation(room->objects[i], room->objects[j]);
+    }
+
 }
 void parser_inputfile(const char* filename, Room * parser_inputfile) {
 	ifstream instream(filename);

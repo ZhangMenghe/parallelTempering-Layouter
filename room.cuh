@@ -19,7 +19,7 @@ struct groupMapStruct{
 };
 struct pairMapStruct{
 	int pid;
-	int objTypes[MAX_SUPPORT_TYPE];
+	int objTypes[MAX_SUPPORT_TYPE] = {-1};
 	int minDist[MAX_SUPPORT_TYPE];
 	int maxDist[MAX_SUPPORT_TYPE];
 };
@@ -70,6 +70,7 @@ private:
 	void init_a_wall(wall *newWall, vector<float> params);
     void init_an_object(vector<float>params, bool isFixed = false, bool isPrevious = false);
     void set_pairwise_map();
+
     void update_mask_by_wall(const wall* wal);
 public:
     bool initialized;
@@ -94,6 +95,7 @@ public:
 	float overlappingThreshold;
 	int freeObjIds[MAX_NUM_OBJS];
 	vector<vector<float>> obstacles;
+	vector<vector<int>> actualPairs;
     Room() {
         center[0] = center[1] = center[2] =.0f;
         objctNum = 0;
@@ -105,6 +107,7 @@ public:
 
     }
     void initialize_room(float s_width = 800.0f, float s_height = 600.0f);
+	void set_objs_pairwise_relation(const singleObj& obj1, const singleObj& obj2);
     void add_a_wall(vector<float> params);
     void add_an_object(vector<float> params, bool isPrevious = false, bool isFixed = false);
     void add_a_focal_point(vector<float> fp);
