@@ -55,6 +55,7 @@ struct sharedRoom{
 	float indepenFurArea, obstacleArea, wallArea;
 	float overlappingThreshold;
 	int colCount, rowCount, mskCount;
+	int pairNum;
 	groupMapStruct groupMap[MAX_GROUP_ALLOW];
 	pairMapStruct pairMap[CONSTRAIN_PAIRS];
 	wall deviceWalls[MAX_NUM_WALLS];

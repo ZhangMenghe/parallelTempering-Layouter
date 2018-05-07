@@ -88,7 +88,8 @@ __device__
 void getTemporalTransAndRot(){
 
 }
-__device__ float t(float d, float m, float M, int a = 2){
+__device__
+float t(float d, float m, float M, int a = 2){
     if (d < m)
 		return powf((d / m), float(a));
 	else if (d > M)
@@ -97,6 +98,10 @@ __device__ float t(float d, float m, float M, int a = 2){
 		return 1.0f;
 }
 
+__device__
+float dist_between_points(const float* pos1, const float* pos2) {
+	return sqrtf(powf((pos1[0] - pos2[0]),2.0f) + powf((pos1[1] - pos2[1]),2.0f) +powf((pos1[2] - pos2[2]),2.0f));
+}
 //TODO:
 __device__
 int get_sum_furnitureMsk(unsigned char* mask){
@@ -105,11 +110,7 @@ int get_sum_furnitureMsk(unsigned char* mask){
 }
 //TODO:
 //void get_all_reflection(map<int, Vec3f> focalPoint_map, vector<Vec3f> &reflectTranslate, vector<float> & reflectZrot, float refk= INFINITY);
-//TODO: currently remove wall constrain because there are force to
-__device__
-void get_pairwise_relation(const singleObj& obj1, const singleObj& obj2, int&pfg, float&m, float&M){
 
-}
 //Clearance :
 //Mcv(I) that minimize the overlap between furniture(with space)
 __device__
@@ -128,8 +129,18 @@ void cal_circulation_term(float& mci){
 //Mpd: for example  coffee table and seat
 //mpa: relative direction constraints
 __device__
-void cal_pairwise_relationship(float& mpd, float& mpa){
-
+void cal_pairwise_relationship(float& mpd, float& mpa, int objIndex){
+    for(int i=0; i<sWrapper[0].wRoom->pairNum; i++){
+        singleObj * obj1 = &sWrapper[0].wObjs[objIndex + sWrapper[0].wPairRelation[4*i]];
+        singleObj * obj2 = &sWrapper[0].wObjs[objIndex + sWrapper[0].wPairRelation[4*i+1]];
+        //printf("%d - %d - %d - %d\n",blockIdx.x, threadIdx.x, obj1->id, obj2->id);
+        mpd -= t(dist_between_points(obj1->translation, obj2->translation),
+                sWrapper[0].wPairRelation[4*i + 2],
+                sWrapper[0].wPairRelation[4*i + 3]);
+        float cosfg2 = powf((sinf(obj1->zrotation) * sinf(obj2->zrotation)
+                    + cosf(obj1->zrotation) * cosf(obj2->zrotation)),2.0f);
+        mpa -= 8 * powf(cosfg2, 2) - 8 * cosfg2;
+    }
 }
 //Conversation
 //Mcd:group a collection of furniture items into a conversation area
@@ -157,7 +168,7 @@ void get_constrainTerms(float* costList, int weightTerm){
 			cal_circulation_term(costList[threadIdx.x]);
 			break;
 		case 2:
-			cal_pairwise_relationship(costList[threadIdx.x], costList[threadIdx.x + 1]);
+			cal_pairwise_relationship(costList[threadIdx.x], costList[threadIdx.x + 1], blockIdx.x * sWrapper[0].wRoom->objctNum);
 			break;
 		case 3:
 			cal_conversation_term(costList[threadIdx.x+1], costList[threadIdx.x+2]);
