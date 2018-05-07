@@ -122,8 +122,39 @@ float get_nearest_wall_dist(singleObj * obj, wall* deviceWalls, int wallNum) {
 	// printf("%d : %f\n", obj->nearestWall, min_dist);
 	return min_dist;
 }
-//TODO:
-//void get_all_reflection(map<int, Vec3f> focalPoint_map, vector<Vec3f> &reflectTranslate, vector<float> & reflectZrot, float refk= INFINITY);
+
+__device__
+void get_all_reflection(groupMapStruct * groupMap, singleObj * objs, int groupNum){
+    for(int i=0; i<groupNum; i++){
+        for(int j=0; j<groupMap[i].memNum; j++){
+            if(groupMap[i].objIds[j] == threadIdx.x){
+                if(groupMap[i].focal[0] != INFINITY){
+                    if(REFLECT_K == 0){
+                        objs[threadIdx.x].refRot = PI - objs[threadIdx.x].zrotation;
+                        objs[threadIdx.x].refPos[0] = objs[threadIdx.x].translation[0];
+                        objs[threadIdx.x].refPos[1] = 2*groupMap[i].focal[1] -  objs[threadIdx.x].translation[1];
+                    }
+                    else if(REFLECT_K== INFINITY){
+                        objs[threadIdx.x].refRot = - objs[threadIdx.x].zrotation;
+                        objs[threadIdx.x].refPos[0] = 2*groupMap[i].focal[0] -  objs[threadIdx.x].translation[0];
+                        objs[threadIdx.x].refPos[1] = objs[threadIdx.x].translation[1];
+                    }
+                    else{
+                        float invk = 1/ (REFLECT_K +0.00001f) ;
+                        float b = groupMap[i].focal[1] - groupMap[i].focal[0] * REFLECT_K;
+                        float x = 2 * objs[threadIdx.x].translation[1] + (invk - REFLECT_K)*objs[threadIdx.x].translation[0] - 2 * b;
+                        float y = -invk * x + objs[threadIdx.x].translation[1] + invk*objs[threadIdx.x].translation[0];
+                        objs[threadIdx.x].refPos[0] = x;
+                        objs[threadIdx.x].refPos[1]  = y;
+                        objs[threadIdx.x].refRot = PI - objs[threadIdx.x].zrotation - 2*atan2f(objs[threadIdx.x].translation[1]-y, objs[threadIdx.x].translation[0]-x);
+                    }
+                }
+                objs[threadIdx.x].syncState = true;
+                return;
+            }
+        }
+    }
+}
 
 //Clearance :
 //Mcv(I) that minimize the overlap between furniture(with space)
@@ -208,7 +239,19 @@ void cal_alignment_term(float& mfa, float&mwa, int objIndexId){
 //Emphasis:
 //compute focal center
 __device__
-void cal_emphasis_term(float& mef, float& msy, float gamma = 1){}
+void cal_emphasis_term(float& mef, float& msy, int objIndexId, float gamma = 1){
+    bool state = true;
+    do{
+        state = true;
+        for(int i=0;i<sWrapper[0].wRoom->objctNum;i++)
+            state = state && sWrapper[0].wObjs[objIndexId + i].syncState;
+    }while(state == false);
+
+    printf("Emphasis: %d\n", blockIdx.x );
+
+    for(int i=0;i<sWrapper[0].wRoom->objctNum;i++)
+         sWrapper[0].wObjs[objIndexId + i].syncState = false;
+}
 __device__
 void get_constrainTerms(float* costList, int weightTerm, int objIndexId){
 	switch (weightTerm) {
@@ -231,7 +274,7 @@ void get_constrainTerms(float* costList, int weightTerm, int objIndexId){
 			cal_alignment_term(costList[threadIdx.x+2], costList[threadIdx.x+3], objIndexId);
 			break;
 		case 6:
-			cal_emphasis_term(costList[threadIdx.x+3],costList[threadIdx.x+4]);
+			cal_emphasis_term(costList[threadIdx.x+3],costList[threadIdx.x+4], objIndexId);
 			break;
 		default:
 			break;
@@ -239,27 +282,29 @@ void get_constrainTerms(float* costList, int weightTerm, int objIndexId){
 }
 
 __device__
-float getWeightedCost(float* costList, int consStartId, int objIndexId){
-    if(threadIdx.x >= consStartId){
+float getWeightedCost(float* costList, float * shareState, int consStartId, int objIndexId){
+    if(threadIdx.x < consStartId){
+        get_all_reflection(sWrapper[0].wRoom->groupMap, &sWrapper[0].wObjs[objIndexId], sWrapper[0].wRoom->groupNum);
+    }
+    else{
         get_constrainTerms(costList, threadIdx.x-consStartId, objIndexId);
         costList[threadIdx.x] = threadIdx.x;
     }
-
     //else do nothing, empty the first #numofObjs slots
     __syncthreads();
-    float res = 0;
-    for(int i=0; i<WEIGHT_NUM; i++)
-        res += weights[i] * costList[consStartId + i];
-    return res;
+    if(threadIdx.x < WEIGHT_NUM)
+        shareState[blockIdx.x] += weights[threadIdx.x] * costList[consStartId + threadIdx.x];
+    __syncthreads();
+    return shareState[blockIdx.x];
 }
 
 __device__
-void Metropolis_Hastings(float* costList, float* temparature, int* pickedIdxs, int objIndexId, unsigned int seed){
+void Metropolis_Hastings(float* costList,float* shareState, float* temparature, int* pickedIdxs, int objIndexId, unsigned int seed){
     float cpost, p0, p1, alpha;
     int startId = blockIdx.x * nThreads;
     int index = startId + threadIdx.x;
     costList[index] = 0;
-    float cpre = getWeightedCost(&costList[startId], sWrapper[0].wRoom->objctNum, objIndexId);
+    float cpre = 0;//getWeightedCost(&costList[startId], shareState, sWrapper[0].wRoom->objctNum, objIndexId);
     //first thread cost is the best cost of block
     costList[startId] = cpre;
     for(int nt = 0; nt<nTimes; nt++){
@@ -271,7 +316,7 @@ void Metropolis_Hastings(float* costList, float* temparature, int* pickedIdxs, i
         }
         __syncthreads();
 
-        cpost = getWeightedCost(&costList[startId], sWrapper[0].wRoom->objctNum, objIndexId);
+        cpost = getWeightedCost(&costList[startId],shareState, sWrapper[0].wRoom->objctNum, objIndexId);
         costList[index] = 0;
         if(pickedIdxs[blockIdx.x] == threadIdx.x){
             p1 = density_function(temparature[blockIdx.x], cpost);
@@ -284,6 +329,7 @@ void Metropolis_Hastings(float* costList, float* temparature, int* pickedIdxs, i
                 cpre = cpost;
             }
             pickedIdxs[blockIdx.x] = int(get_randomNum(seed+blockIdx.x, sWrapper[0].wRoom->objctNum));
+            shareState[blockIdx.x] = 0;
         }
         __syncthreads();
     }
@@ -304,12 +350,14 @@ void Do_Metropolis_Hastings(sharedWrapper *gWrapper, unsigned int seed){
         }
     }
     float* costList = sWrapper[0].wFloats;
-    float* temparature = (float *) & costList[nBlocks * nThreads];
+    float * shareState = (float *)& costList[nBlocks * nThreads];
+    float* temparature = (float *) & shareState[nBlocks];
     int* pickedIdxs = (int *)& temparature[nBlocks];
+    shareState[blockIdx.x] = 0;
 	temparature[blockIdx.x] = -get_randomNum(seed+blockIdx.x, 100) / 10;
     pickedIdxs[blockIdx.x] = int(get_randomNum(seed+blockIdx.x, sWrapper[0].wRoom->objctNum));
     // printf("%d\n", pickedIdxs[blockIdx.x]);
-    Metropolis_Hastings(costList, temparature, pickedIdxs, blockIdx.x * sWrapper[0].wRoom->objctNum, seed);
+    Metropolis_Hastings(costList,shareState, temparature, pickedIdxs, blockIdx.x * sWrapper[0].wRoom->objctNum, seed);
     __syncthreads();
 }
 
@@ -331,7 +379,7 @@ void generate_suggestions(Room * m_room){
     cudaMallocManaged(&gWrapper->wMask, nBlocks *tMem);
     cudaMemcpy(gWrapper->wMask, m_room->furnitureMask, tMem, cudaMemcpyHostToDevice);
 
-	int floatMem =  nBlocks *(2+nThreads) * sizeof(float);
+	int floatMem =  nBlocks *(3+nThreads) * sizeof(float);
     cudaMallocManaged(&gWrapper->wFloats, floatMem);
 
     int pairMem = m_room->actualPairs.size() * 4 * sizeof(int);
