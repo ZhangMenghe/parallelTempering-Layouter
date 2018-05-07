@@ -40,7 +40,6 @@ struct singleObj{
 	float area;
 	float refRot;
 	float refPos[2];
-	bool syncState = false;
 };
 
 struct wall{

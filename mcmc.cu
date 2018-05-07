@@ -124,35 +124,27 @@ float get_nearest_wall_dist(singleObj * obj, wall* deviceWalls, int wallNum) {
 }
 
 __device__
-void get_all_reflection(groupMapStruct * groupMap, singleObj * objs, int groupNum){
-    for(int i=0; i<groupNum; i++){
-        for(int j=0; j<groupMap[i].memNum; j++){
-            if(groupMap[i].objIds[j] == threadIdx.x){
-                if(groupMap[i].focal[0] != INFINITY){
-                    if(REFLECT_K == 0){
-                        objs[threadIdx.x].refRot = PI - objs[threadIdx.x].zrotation;
-                        objs[threadIdx.x].refPos[0] = objs[threadIdx.x].translation[0];
-                        objs[threadIdx.x].refPos[1] = 2*groupMap[i].focal[1] -  objs[threadIdx.x].translation[1];
-                    }
-                    else if(REFLECT_K== INFINITY){
-                        objs[threadIdx.x].refRot = - objs[threadIdx.x].zrotation;
-                        objs[threadIdx.x].refPos[0] = 2*groupMap[i].focal[0] -  objs[threadIdx.x].translation[0];
-                        objs[threadIdx.x].refPos[1] = objs[threadIdx.x].translation[1];
-                    }
-                    else{
-                        float invk = 1/ (REFLECT_K +0.00001f) ;
-                        float b = groupMap[i].focal[1] - groupMap[i].focal[0] * REFLECT_K;
-                        float x = 2 * objs[threadIdx.x].translation[1] + (invk - REFLECT_K)*objs[threadIdx.x].translation[0] - 2 * b;
-                        float y = -invk * x + objs[threadIdx.x].translation[1] + invk*objs[threadIdx.x].translation[0];
-                        objs[threadIdx.x].refPos[0] = x;
-                        objs[threadIdx.x].refPos[1]  = y;
-                        objs[threadIdx.x].refRot = PI - objs[threadIdx.x].zrotation - 2*atan2f(objs[threadIdx.x].translation[1]-y, objs[threadIdx.x].translation[0]-x);
-                    }
-                }
-                objs[threadIdx.x].syncState = true;
-                return;
-            }
+void get_obj_reflection(singleObj * obj, const float* focal){
+    if(focal[0] == INFINITY)
+        return;
+    if(REFLECT_K == 0){
+        obj->refRot = PI - obj->zrotation;
+        obj->refPos[0] = obj->translation[0];
+        obj->refPos[1] = 2*focal[1] -  obj->translation[1];
+    }
+    else if(REFLECT_K== INFINITY){
+            obj->refRot = - obj->zrotation;
+            obj->refPos[0] = 2*focal[0] -  obj->translation[0];
+            obj->refPos[1] = obj->translation[1];
         }
+    else{
+        float invk = 1/ (REFLECT_K +0.00001f) ;
+        float b = focal[1] - focal[0] * REFLECT_K;
+        float x = 2 * obj->translation[1] + (invk - REFLECT_K)*obj->translation[0] - 2 * b;
+        float y = -invk * x + obj->translation[1] + invk*obj->translation[0];
+        obj->refPos[0] = x;
+        obj->refPos[1]  = y;
+        obj->refRot = PI - obj->zrotation - 2*atan2f(obj->translation[1]-y, obj->translation[0]-x);
     }
 }
 
@@ -174,12 +166,12 @@ void cal_circulation_term(float& mci){
 //Mpd: for example  coffee table and seat
 //mpa: relative direction constraints
 __device__
-void cal_pairwise_relationship(float& mpd, float& mpa, int objIndex){
+void cal_pairwise_relationship(singleObj* objs, float& mpd, float& mpa){
     singleObj * obj1, *obj2;
     float cosfg2;
     for(int i=0; i<sWrapper[0].wRoom->pairNum; i++){
-        obj1 = &sWrapper[0].wObjs[objIndex + sWrapper[0].wPairRelation[4*i]];
-        obj2 = &sWrapper[0].wObjs[objIndex + sWrapper[0].wPairRelation[4*i+1]];
+        obj1 = &objs[sWrapper[0].wPairRelation[4*i]];
+        obj2 = &objs[sWrapper[0].wPairRelation[4*i+1]];
         //printf("%d - %d - %d - %d\n",blockIdx.x, threadIdx.x, obj1->id, obj2->id);
         mpd -= t(dist_between_points(obj1->translation, obj2->translation),
                 sWrapper[0].wPairRelation[4*i + 2],
@@ -193,7 +185,7 @@ void cal_pairwise_relationship(float& mpd, float& mpa, int objIndex){
 //TODO: double check please
 //Mcd:group a collection of furniture items into a conversation area
 __device__
-void cal_conversation_term(float& mcd, float& mca,int objIndexId){
+void cal_conversation_term(singleObj *obj, float& mcd, float& mca){
     // singleObj * obj;
     // for(int i=0; i<sWrapper[0].wRoom->groupNum; i++){
     //     for(int k=0; k<sWrapper[0].wRoom->groupMap[i].memNum; k++){
@@ -204,13 +196,11 @@ void cal_conversation_term(float& mcd, float& mca,int objIndexId){
 //balance:
 //place the mean of the distribution of visual weight at the center of the composition
 __device__
-void cal_balance_term(float &mvb, int objIndexId){
+void cal_balance_term(const singleObj * obj, float &mvb){
     float centroid[3] = {.0f};
-    for(int i=0; i<sWrapper[0].wRoom->objctNum; i++){
-        centroid[0] += sWrapper[0].wObjs[objIndexId + i].area * sWrapper[0].wObjs[objIndexId + i].translation[0];
-        centroid[1] += sWrapper[0].wObjs[objIndexId + i].area * sWrapper[0].wObjs[objIndexId + i].translation[1];
-        centroid[2] += sWrapper[0].wObjs[objIndexId + i].area * sWrapper[0].wObjs[objIndexId + i].translation[2];
-    }
+    centroid[0] += obj->area * obj->translation[0];
+    centroid[1] += obj->area * obj->translation[1];
+    centroid[2] += obj->area * obj->translation[2];
     centroid[0] /= sWrapper[0].wRoom->indepenFurArea;centroid[1] /= sWrapper[0].wRoom->indepenFurArea;centroid[2] /= sWrapper[0].wRoom->indepenFurArea;
     //printf("%f - %f - %f- %f\n", centroid[0],centroid[1],centroid[2],sWrapper[0].wRoom->indepenFurArea);
     mvb = dist_between_points(centroid, sWrapper[0].wRoom->RoomCenter);
@@ -218,82 +208,57 @@ void cal_balance_term(float &mvb, int objIndexId){
 //Alignment:
 //compute furniture alignment term
 __device__
-void cal_alignment_term(float& mfa, float&mwa, int objIndexId){
-    singleObj * obj1, *obj2;
-    for(int i=0; i<sWrapper[0].wRoom->groupNum; i++){
-        for(int k=0; k<sWrapper[0].wRoom->groupMap[i].memNum; k++){
-            obj1 = &sWrapper[0].wObjs[objIndexId + k];
-            for(int k2 = k; k2<sWrapper[0].wRoom->groupMap[i].memNum; k2++){
-                obj2 = &sWrapper[0].wObjs[objIndexId + k2];
-                mfa -= cosf(4 * (obj1->zrotation - obj2->zrotation));
-            }
-            get_nearest_wall_dist(obj1, sWrapper[0].wRoom->deviceWalls,sWrapper[0].wRoom->wallNum);
-            if(!obj1->adjoinWall)
-                mwa -= cosf(4 * (obj1->zrotation
-                        - sWrapper[0].wRoom->deviceWalls[obj1->nearestWall].zrotation
-                        - PI/2));
+void cal_alignment_term(singleObj * objs, int gid, int mid, float& mfa, float&mwa){
+    singleObj *obj1 = &objs[threadIdx.x] , *obj2;
 
-        }
+    get_nearest_wall_dist(obj1, sWrapper[0].wRoom->deviceWalls, sWrapper[0].wRoom->wallNum);
+    if(!obj1->adjoinWall)
+        mwa -= cosf(4 * (obj1->zrotation
+                - sWrapper[0].wRoom->deviceWalls[obj1->nearestWall].zrotation
+                - PI/2));
+
+    for(int k = mid; k<sWrapper[0].wRoom->groupMap[gid].memNum-1; k++){
+        obj2 = &objs[threadIdx.x + k];
+        mfa -= cosf(4 * (obj1->zrotation - obj2->zrotation));
     }
 }
 //Emphasis:
 //compute focal center
 __device__
-void cal_emphasis_term(float& mef, float& msy, int objIndexId, float gamma = 1){
-    bool state = true;
-    do{
-        state = true;
-        for(int i=0;i<sWrapper[0].wRoom->objctNum;i++)
-            state = state && sWrapper[0].wObjs[objIndexId + i].syncState;
-    }while(state == false);
-
+void cal_emphasis_term(singleObj * obj, int gid, float& mef, float& msy, float gamma = 1){
+    get_obj_reflection(obj, sWrapper[0].wRoom->groupMap[gid].focal);
     printf("Emphasis: %d\n", blockIdx.x );
-
-    for(int i=0;i<sWrapper[0].wRoom->objctNum;i++)
-         sWrapper[0].wObjs[objIndexId + i].syncState = false;
-}
-__device__
-void get_constrainTerms(float* costList, int weightTerm, int objIndexId){
-	switch (weightTerm) {
-		case 0://mcv
-			cal_clearance_violation(costList[threadIdx.x]);
-			break;
-		case 1://Mci
-			cal_circulation_term(costList[threadIdx.x]);
-			break;
-		case 2:
-			cal_pairwise_relationship(costList[threadIdx.x], costList[threadIdx.x + 1], objIndexId);
-			break;
-		case 3:
-			cal_conversation_term(costList[threadIdx.x+1], costList[threadIdx.x+2], objIndexId);
-			break;
-		case 4:
-			cal_balance_term(costList[threadIdx.x+2], objIndexId);
-			break;
-		case 5:
-			cal_alignment_term(costList[threadIdx.x+2], costList[threadIdx.x+3], objIndexId);
-			break;
-		case 6:
-			cal_emphasis_term(costList[threadIdx.x+3],costList[threadIdx.x+4], objIndexId);
-			break;
-		default:
-			break;
-	}
 }
 
 __device__
-float getWeightedCost(float* costList, float * shareState, int consStartId, int objIndexId){
-    if(threadIdx.x < consStartId){
-        get_all_reflection(sWrapper[0].wRoom->groupMap, &sWrapper[0].wObjs[objIndexId], sWrapper[0].wRoom->groupNum);
+void calCostParam(singleObj * objs, float* costList){
+    singleObj * obj = &objs[threadIdx.x];
+    for(int i=0; i<sWrapper[0].wRoom->groupNum; i++){
+        for(int j=0; j<sWrapper[0].wRoom->groupMap[i].memNum; j++){
+            if(sWrapper[0].wRoom->groupMap[i].objIds[j] == threadIdx.x){
+                cal_emphasis_term(obj, i, costList[1], costList[2]);
+                cal_alignment_term(objs, i, j, costList[3], costList[4]);
+                cal_conversation_term(obj, costList[5], costList[6]);
+                cal_balance_term(obj, costList[7]);
+            }
+        }
     }
-    else{
-        get_constrainTerms(costList, threadIdx.x-consStartId, objIndexId);
+}
+__device__
+float getWeightedCost(singleObj* objs, float* costList, float * shareState, int objNum){
+    if(threadIdx.x < objNum)
+        calCostParam(objs, costList);
+    else if(threadIdx.x == objNum)
+        cal_pairwise_relationship(objs, costList[10], costList[11]);
+    else {
+        cal_circulation_term(costList[8]);
+        cal_clearance_violation(costList[9]);
         costList[threadIdx.x] = threadIdx.x;
     }
     //else do nothing, empty the first #numofObjs slots
     __syncthreads();
     if(threadIdx.x < WEIGHT_NUM)
-        shareState[blockIdx.x] += weights[threadIdx.x] * costList[consStartId + threadIdx.x];
+        shareState[blockIdx.x] += weights[threadIdx.x] * costList[1+threadIdx.x];
     __syncthreads();
     return shareState[blockIdx.x];
 }
@@ -316,7 +281,7 @@ void Metropolis_Hastings(float* costList,float* shareState, float* temparature, 
         }
         __syncthreads();
 
-        cpost = getWeightedCost(&costList[startId],shareState, sWrapper[0].wRoom->objctNum, objIndexId);
+        cpost = getWeightedCost(&sWrapper[0].wObjs[objIndexId], &costList[startId], shareState, sWrapper[0].wRoom->objctNum);
         costList[index] = 0;
         if(pickedIdxs[blockIdx.x] == threadIdx.x){
             p1 = density_function(temparature[blockIdx.x], cpost);
