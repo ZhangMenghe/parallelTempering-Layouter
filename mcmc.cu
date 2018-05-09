@@ -80,11 +80,27 @@ float density_function(float beta, float cost) {
 }
 
 __device__
-float get_randomNum(unsigned int seed, int maxLimit) {
-  curandState_t state;
-  //seed, sequence number(multiple cores), offset
-  curand_init(seed, 0,0, &state);
-  return curand(&state) % maxLimit;
+void get_random_state(curandState_t * state, int index){
+    //seed, sequence number(multiple cores), offset
+    curand_init((unsigned long long )clock() + index, 0, 0, state);
+}
+__device__
+float get_normal_random(float mean, float devision,int index = blockIdx.x * blockDim.x + threadIdx.x){
+    curandState_t state;
+    get_random_state(&state, index);
+    return curand_normal(&state) * devision/2 + mean;
+}
+__device__
+int get_int_random(int maxLimit,int index = blockIdx.x * blockDim.x + threadIdx.x){
+    curandState_t state;
+    get_random_state(&state, index);
+    return curand(&state)%maxLimit;
+}
+__device__
+float get_float_random(int maxLimit, int index = blockIdx.x * blockDim.x + threadIdx.x) {
+    curandState_t state;
+    get_random_state(&state, index);
+    return curand_uniform(&state) * maxLimit;
 }
 
 __device__
@@ -148,15 +164,11 @@ void update_mask_by_object(unsigned char* mask, float* tmpSlot, float * vertices
 }
 
 __device__
-void changeTemparature(float * temparature, unsigned int seed){
-    int t1 = int(get_randomNum(blockIdx.x, nBlocks+1))%nBlocks;
+void changeTemparature(float * temparature){
+    int t1 = get_int_random(nBlocks);
     int t2 = t1;
-    int times = 0;
-    while(t2 == t1 && times++ < 3){
-        t2 = int(get_randomNum(blockIdx.x, nBlocks+1))%nBlocks;
-    }
-    if(t2 == t1)
-        t2 = (t1+1)%nBlocks;
+    while(t2 == t1)
+        t2 = get_int_random(nBlocks);
     float tmp = temparature[t1];
     temparature[t1] = temparature[t2];
     temparature[t2] = tmp;
@@ -177,11 +189,11 @@ void randomly_perturb(sharedRoom* room, singleObj * obj, unsigned char * mask, f
         if (obj->adjoinWall)
             random_along_wall(room, obj);
         else{
-            switch ( int(get_randomNum(index, 3)) ){
+            switch (get_int_random(3, index)){
                 // randomly rotate
                 case 0:
                     if (obj->alignedTheWall)
-                        set_obj_zrotation(obj, room->deviceWalls[int(get_randomNum(index, room->wallNum))].zrotation);
+                        set_obj_zrotation(obj, room->deviceWalls[get_int_random(room->wallNum, index)].zrotation);
                     else
                         set_obj_zrotation(obj,0);
                     break;
@@ -251,7 +263,7 @@ void initial_assignment(sharedRoom* room, singleObj * objs,  unsigned char * mas
         if (obj->adjoinWall)
             random_along_wall(room, obj);
         else if (obj->alignedTheWall)
-            set_obj_zrotation(obj, room->deviceWalls[int(get_randomNum(blockIdx.x * nThreads + threadIdx.x, room->wallNum))].zrotation);
+            set_obj_zrotation(obj, room->deviceWalls[get_int_random(room->wallNum)].zrotation);
     }
 
     __syncthreads();
@@ -493,7 +505,7 @@ float getWeightedCost(singleObj* objs, float* costList, float * shareState, int 
 }
 
 __device__
-void Metropolis_Hastings(float* costList,float* shareState, float* temparature, int* pickedIdxs, int objIndexId, unsigned int seed){
+void Metropolis_Hastings(float* costList,float* shareState, float* temparature, int* pickedIdxs, int objIndexId){
     float cpost, p0, p1, alpha;
     int startId = blockIdx.x * nThreads;
     int index = startId + threadIdx.x;
@@ -510,7 +522,7 @@ void Metropolis_Hastings(float* costList,float* shareState, float* temparature, 
     for(int nt = 0; nt<nTimes; nt++){
         if(pickedIdxs[blockIdx.x] == threadIdx.x){
             if(nt % 10 == 0)
-                changeTemparature(temparature, seed+blockIdx.x);
+                changeTemparature(temparature);
             p0 = density_function(temparature[blockIdx.x], cpre);
         }
         shareState[blockIdx.x] = 0;
@@ -529,7 +541,7 @@ void Metropolis_Hastings(float* costList,float* shareState, float* temparature, 
                 costList[startId] = cpost;
                 cpre = cpost;
             }
-            pickedIdxs[blockIdx.x] = int(get_randomNum(seed+blockIdx.x, sWrapper[0].wRoom->objctNum));
+            pickedIdxs[blockIdx.x] = get_int_random(sWrapper[0].wRoom->objctNum, index);
             shareState[blockIdx.x] = 0;
         }
         __syncthreads();
@@ -537,7 +549,7 @@ void Metropolis_Hastings(float* costList,float* shareState, float* temparature, 
 }
 
 __global__
-void Do_Metropolis_Hastings(sharedWrapper *gWrapper, unsigned int seed){
+void Do_Metropolis_Hastings(sharedWrapper *gWrapper){
     sWrapper[0] = *gWrapper;
     if(blockIdx.x !=0 ){
         if(threadIdx.x < sWrapper[0].wRoom->objctNum){
@@ -556,10 +568,10 @@ void Do_Metropolis_Hastings(sharedWrapper *gWrapper, unsigned int seed){
     float* temparature = (float *) & shareState[nBlocks];
     int* pickedIdxs = (int *)& temparature[nBlocks];
     shareState[blockIdx.x] = 0;
-	temparature[blockIdx.x] = -get_randomNum(seed+blockIdx.x, 100) / 10;
-    pickedIdxs[blockIdx.x] = int(get_randomNum(seed+blockIdx.x, sWrapper[0].wRoom->objctNum));
+	temparature[blockIdx.x] = -get_float_random(10);
+    pickedIdxs[blockIdx.x] = get_int_random(sWrapper[0].wRoom->objctNum);
     // printf("%d\n", pickedIdxs[blockIdx.x]);
-    Metropolis_Hastings(costList,shareState, temparature, pickedIdxs, blockIdx.x * sWrapper[0].wRoom->objctNum, seed);
+    Metropolis_Hastings(costList,shareState, temparature, pickedIdxs, blockIdx.x * sWrapper[0].wRoom->objctNum);
     __syncthreads();
 }
 
@@ -592,7 +604,7 @@ void generate_suggestions(Room * m_room){
     }
 
 
-	Do_Metropolis_Hastings<<<nBlocks, nThreads, sizeof(*gWrapper)>>>(gWrapper, time(NULL));
+	Do_Metropolis_Hastings<<<nBlocks, nThreads, sizeof(*gWrapper)>>>(gWrapper);
 	cudaDeviceSynchronize();
 
     cudaFree(gWrapper->wRoom);
