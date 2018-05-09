@@ -225,14 +225,20 @@ int randomly_perturb(sharedRoom* room, singleObj * objs, int pickedIdx, unsigned
                               room->rowCount/2, room->colCount,
                               threadIdx.x - 1, nThreads-1, -1);
 
-
+    if(secondChangeId!=-1)
+        update_mask_by_object(mask, tmpSlot, objs[secondChangeId].lastVertices, objs[secondChangeId].lastBoundingBox,
+                              room->rowCount/2, room->colCount,
+                              threadIdx.x, nThreads, -1);
     __syncthreads();
 
     update_mask_by_object(mask, tmpSlot, obj->vertices, obj->boundingBox,
                           room->rowCount/2, room->colCount,
                           threadIdx.x, nThreads, 1);
 
-
+    if(secondChangeId!=-1)
+       update_mask_by_object(mask, tmpSlot, objs[secondChangeId].vertices, objs[secondChangeId].boundingBox,
+                            room->rowCount/2, room->colCount,
+                            threadIdx.x, nThreads, 1);
     tmpSlot[threadIdx.x] = 0;
     get_sum_furnitureMsk(mask, room->colCount, room->rowCount, &tmpSlot[threadIdx.x], threadIdx.x, nThreads);
 
@@ -319,14 +325,23 @@ void storeOrigin(singleObj * obj){
 }
 
 __device__
-void restoreOrigin(singleObj * obj){
+void restoreOrigin(sharedRoom * room, unsigned char* mask, float * tmpSlot, singleObj * obj){
+    update_mask_by_object(mask, tmpSlot, obj->vertices, obj->boundingBox,
+                      room->rowCount/2, room->colCount,
+                      threadIdx.x, nThreads, -1);
+
+    update_mask_by_object(mask, tmpSlot, obj->lastVertices, obj->lastBoundingBox,
+                        room->rowCount/2, room->colCount,
+                        threadIdx.x, nThreads, 1);
+
     for(int i=0;i<8;i++)
         obj->vertices[i] = obj->lastVertices[i];
     for(int i=0;i<3;i++)
         obj->translation[i] = obj->lastTransAndRot[i];
     obj->zrotation = obj->lastTransAndRot[3];
     obj->boundingBox = obj->lastBoundingBox;
-    //TODO:should restore mask as well
+
+    __syncthreads();
 }
 __device__
 void getTemporalTransAndRot(){
@@ -582,9 +597,11 @@ void Metropolis_Hastings(float* costList,float* shareState, float* temparature, 
             p1 = density_function(temparature[blockIdx.x], cpost);
             alpha = fminf(1.0f, p1/p0);
             if(alpha > THREADHOLD_T){
-                restoreOrigin(&sWrapper[0].wObjs[objIndexId + pickedIdxs[blockIdx.x]]);
+                restoreOrigin(sWrapper[0].wRoom, &sWrapper[0].wMask[sWrapper[0].wRoom->mskCount * blockIdx.x],&costList[startId],
+                                &sWrapper[0].wObjs[objIndexId + pickedIdxs[blockIdx.x]]);
                 if(secondChangeId!=-1)
-                    restoreOrigin(&sWrapper[0].wObjs[objIndexId + secondChangeId]);
+                    restoreOrigin(sWrapper[0].wRoom, &sWrapper[0].wMask[sWrapper[0].wRoom->mskCount * blockIdx.x],&costList[startId],
+                                &sWrapper[0].wObjs[objIndexId + secondChangeId]);
             }
             else if(cpost < costList[blockIdx.x]){
                 getTemporalTransAndRot();
