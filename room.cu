@@ -218,34 +218,6 @@ void Room::set_obj_zrotation(singleObj * obj, float nrot) {
 	obj->boundingBox.width = maxx-minx; obj->boundingBox.height = maxy-miny;
 }
 
-__device__ __host__
-bool Room::set_obj_translation(singleObj* obj, float tx, float ty) {
-	float movex = tx - obj->translation[0];
-	float movey = ty - obj->translation[1];
-	bool c1 = obj->boundingBox.x + movex <= -half_width;
-	bool c2 = obj->boundingBox.x + obj->boundingBox.width + movex >= half_width;
-	bool c3 = obj->boundingBox.y + movey >= half_height;
-	bool c4 = obj->boundingBox.y - obj->boundingBox.height + movey <= -half_height;
-	if (c1 || c2||c3 || c4)
-		return false;
-	// TODO: MASK
-	// update_mask_by_object(obj, tmpCanvas, movex, movey);
-	//
-	// if (cv::sum(furnitureMask)[0] + obj->area < cv::sum(tmpCanvas)[0])
-	// 	return false;
-
-	obj->translation[0] = tx;
-	obj->translation[1] = ty;
-	for (int i = 0; i < 4; i++) {
-		obj->vertices[2*i] += movex;
-		obj->vertices[2*i+1] += movey;
-	}
-	obj->boundingBox.x += movex;
-	obj->boundingBox.y += movey;
-	printf("%f -> %f", obj->translation[0], obj->translation[1]);
-	return true;
-}
-
 __device__
 float Room::get_nearest_wall_dist(singleObj * obj) {
 	float x = obj->translation[0], y = obj->translation[1];
@@ -263,9 +235,7 @@ float Room::get_nearest_wall_dist(singleObj * obj) {
 }
 void Room::update_mask_by_object(const singleObj* obj, unsigned char * target, float movex, float movey){
 }
-void Room::update_furniture_mask(){
-	//TODO: DON'T KNOW....
-}
+
 
 // 	float get_single_obj_maskArea(vector<Vec2f> vertices) {
 // 		vector<vector<Point>> contours;

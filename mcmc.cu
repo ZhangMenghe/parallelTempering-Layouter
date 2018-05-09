@@ -24,11 +24,11 @@ extern __shared__ sharedWrapper sWrapper[];
 
 __device__ __managed__ float weights[11]={1.0f};
 __device__ __managed__ float resTransAndRot[RES_NUM * 4];
-__device__
-void random_along_wall(sharedRoom * room, singleObj * obj);
+__device__ void random_along_wall(sharedRoom * room, singleObj * obj);
 __device__ void get_sum_furnitureMsk(unsigned char* mask, int colCount, int rowCount, float * res, int absThreadIdx, int threadStride);
 __device__ void set_obj_zrotation(singleObj * obj, float nrot);
 __device__ bool set_obj_translation(sharedRoom * room, singleObj* obj, float cx, float cy);
+__device__ void storeOrigin(singleObj * obj);
 struct sharedWrapper{
     sharedRoom *wRoom;//1
     singleObj *wObjs;//nblocks
@@ -175,14 +175,10 @@ void changeTemparature(float * temparature){
     temparature[t2] = tmp;
 }
 __device__
-void randomly_perturb(sharedRoom* room, singleObj * obj, unsigned char * mask, float* tmpSlot, float * shareState){
-    //need to store sth here
-    for(int i=0;i<8;i++)
-        obj->lastVertices[i] = obj->vertices[i];
-    for(int i=0;i<3;i++)
-        obj->lastTransAndRot[i] = obj->translation[i];
-    obj->lastTransAndRot[3] = obj->zrotation;
-    obj->lastBoundingBox = obj->boundingBox;
+int randomly_perturb(sharedRoom* room, singleObj * objs, int pickedIdx, unsigned char * mask, float* tmpSlot, float * shareState){
+    int secondChangeId = -1;
+    singleObj * obj = &objs[pickedIdx];
+    storeOrigin(obj);
 
     int index = blockIdx.x * nThreads + threadIdx.x;
     // REAL RANDOM HERE
@@ -190,7 +186,8 @@ void randomly_perturb(sharedRoom* room, singleObj * obj, unsigned char * mask, f
         if (obj->adjoinWall)
             random_along_wall(room, obj);
         else{
-            switch (get_int_random(3, index)){
+            int randomMethod = (room->objctNum < 2)? 2: 3;
+            switch (get_int_random(randomMethod, index)){
                 // randomly rotate
                 case 0:
                     if (obj->alignedTheWall)
@@ -204,14 +201,24 @@ void randomly_perturb(sharedRoom* room, singleObj * obj, unsigned char * mask, f
                                             get_float_random(room->half_height, index)));
                     break;
                 case 2:
-                    break;
-                default:
-                    break;
-            }
-        }
-    }
-
-
+                    singleObj * obj2;
+                    while(1){
+                        obj2 = &objs[get_int_random(room->objctNum, index)];
+                        if(obj2->id == pickedIdx || obj2->adjoinWall || obj2->alignedTheWall)
+                            continue;
+                        storeOrigin(obj2);
+                        if(!set_obj_translation(room, obj, obj2->translation[0], obj2->translation[1]))
+                            continue;
+                        if(!set_obj_translation(room, obj2, obj->translation[0], obj->translation[1]))
+                            continue;
+                        set_obj_zrotation(obj, obj2->zrotation);
+                        set_obj_zrotation(obj2, obj->zrotation);
+                        secondChangeId = obj2->id;
+                        break;
+                    }
+                }//end switch
+        }// end not adjoint wall
+    }//end thread == 0
 
     else
         update_mask_by_object(mask, tmpSlot, obj->lastVertices, obj->lastBoundingBox,
@@ -233,6 +240,7 @@ void randomly_perturb(sharedRoom* room, singleObj * obj, unsigned char * mask, f
 
     sumUp_dataInShare(tmpSlot, &shareState[blockIdx.x]);
     // printf("%f\n", tmpSlot[0]);
+    return secondChangeId;
 
 }
 
@@ -298,6 +306,16 @@ void initial_assignment(sharedRoom* room, singleObj * objs,  unsigned char * mas
 
     //get_sum_furnitureMsk(mask, room->colCount, room->rowCount, &tmpSlot[threadIdx.x], threadIdx.x, threadStride);
     __syncthreads();
+}
+
+__device__
+void storeOrigin(singleObj * obj){
+    for(int i=0;i<8;i++)
+        obj->lastVertices[i] = obj->vertices[i];
+    for(int i=0;i<3;i++)
+        obj->lastTransAndRot[i] = obj->translation[i];
+    obj->lastTransAndRot[3] = obj->zrotation;
+    obj->lastBoundingBox = obj->boundingBox;
 }
 
 __device__
@@ -537,6 +555,7 @@ void Metropolis_Hastings(float* costList,float* shareState, float* temparature, 
     float cpost, p0, p1, alpha;
     int startId = blockIdx.x * nThreads;
     int index = startId + threadIdx.x;
+    int secondChangeId;
     //sharedRoom* room, singleObj * objs,  unsigned char * mask, float* tmpSlot, int threadStride)
     initial_assignment(sWrapper[0].wRoom, &sWrapper[0].wObjs[objIndexId],
                         &sWrapper[0].wMask[sWrapper[0].wRoom->mskCount * blockIdx.x],
@@ -554,7 +573,7 @@ void Metropolis_Hastings(float* costList,float* shareState, float* temparature, 
             p0 = density_function(temparature[blockIdx.x], cpre);
         }
         shareState[blockIdx.x] = 0;
-        randomly_perturb(sWrapper[0].wRoom, &sWrapper[0].wObjs[objIndexId + pickedIdxs[blockIdx.x]],
+        secondChangeId = randomly_perturb(sWrapper[0].wRoom, &sWrapper[0].wObjs[objIndexId],pickedIdxs[blockIdx.x],
                         &sWrapper[0].wMask[sWrapper[0].wRoom->mskCount * blockIdx.x], &costList[startId], shareState);
 
         cpost = getWeightedCost(&sWrapper[0].wObjs[objIndexId], &costList[startId], shareState, sWrapper[0].wRoom->objctNum);
@@ -562,8 +581,11 @@ void Metropolis_Hastings(float* costList,float* shareState, float* temparature, 
         if(pickedIdxs[blockIdx.x] == threadIdx.x){
             p1 = density_function(temparature[blockIdx.x], cpost);
             alpha = fminf(1.0f, p1/p0);
-            if(alpha > THREADHOLD_T)
+            if(alpha > THREADHOLD_T){
                 restoreOrigin(&sWrapper[0].wObjs[objIndexId + pickedIdxs[blockIdx.x]]);
+                if(secondChangeId!=-1)
+                    restoreOrigin(&sWrapper[0].wObjs[objIndexId + secondChangeId]);
+            }
             else if(cpost < costList[blockIdx.x]){
                 getTemporalTransAndRot();
                 costList[startId] = cpost;
@@ -670,9 +692,9 @@ void setupDebugRoom(Room* room){
     room->add_a_wall(vector<float>(wallParam1,wallParam1 + 4));
     room->add_a_wall(vector<float>(wallParam2,wallParam2 + 4));
     room->add_an_object(vector<float>(objParam,objParam + 7));
-    //room->add_an_object(vector<float>(objParam,objParam + 7));
+    room->add_an_object(vector<float>(objParam,objParam + 7));
     room->add_a_focal_point(vector<float>(fpParam,fpParam + 3));
-    room->objects[0].alignedTheWall = true;
+    //room->objects[0].alignedTheWall = true;
     for(int i=0;i<11;i++)
         weights[i] = mWeights[i];
     for(int i=0; i< room->objctNum-1; i++){
