@@ -34,8 +34,9 @@ void Room::init_an_object(vector<float>params, bool isFixed, bool isPrevious) {
 	obj.translation[0] = params[8];obj.translation[1] =params[9];obj.translation[2] =.0f;
 	obj.objWidth = params[10];
 	obj.objHeight = params[11];
-
-	obj.zrotation = params[12] * ANGLE_TO_RAD_F;
+	set_obj_zrotation(&obj, params[12] * ANGLE_TO_RAD_F);
+	cout<<"boundingBox: "<<obj.boundingBox.y<< " "<< obj.boundingBox.height<<endl;
+	//obj.zrotation = params[12] * ANGLE_TO_RAD_F;
 	obj.catalogId = params[13];
 	obj.zheight = params[14];
 	obj.area = obj.objWidth * obj.objHeight;
@@ -65,9 +66,6 @@ void Room::init_an_object(vector<float>params, bool isFixed, bool isPrevious) {
 	objctNum++;
 	if (!isFixed)
 		freeObjIds[freeObjNum++] = obj.id;
-
-	// else
-	// 	update_mask_by_object(&obj, furnitureMask_initial);//is a fixed object
 }
 void Room::set_pairwise_map() {
 	pairMap[0].pid = TYPE_CHAIR;
@@ -144,9 +142,9 @@ void Room::initialize_room(float s_width, float s_height) {
 	rowCount = int(s_height) + 1;	colCount = int(s_width)+1;
 	int tMem = rowCount * colCount * sizeof(unsigned char);
 	furnitureMask_initial = (unsigned char *)malloc(tMem);
-	memset(furnitureMask_initial, 0, colCount*rowCount);
+	memset(furnitureMask_initial, (unsigned char)0, colCount*rowCount);
 	furnitureMask = (unsigned char* )malloc(tMem);
-	memset(furnitureMask_initial, 0 , colCount*rowCount);
+	memset(furnitureMask,(unsigned char)0 , colCount*rowCount);
 	// cout<<int(furnitureMask[100])<<"asdfasdf"<<endl;
 }
 void Room::add_a_wall(vector<float> params){
@@ -201,7 +199,7 @@ void Room::add_a_focal_point(vector<float> fp) {
 	}
 }
 
-__device__ __host__
+
 void Room::set_obj_zrotation(singleObj * obj, float nrot) {
 	float oldRot = obj->zrotation;
 	nrot = remainderf(nrot, 2*PI);

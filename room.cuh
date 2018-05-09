@@ -40,6 +40,10 @@ struct singleObj{
 	float area;
 	float refRot;
 	float refPos[2];
+
+	float lastVertices[8];
+	mRect2f lastBoundingBox;
+	float lastTransAndRot[4];
 };
 
 struct wall{
