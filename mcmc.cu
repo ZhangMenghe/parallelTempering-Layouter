@@ -299,9 +299,16 @@ void initial_assignment(sharedRoom* room, singleObj * objs,  unsigned char * mas
     //get_sum_furnitureMsk(mask, room->colCount, room->rowCount, &tmpSlot[threadIdx.x], threadIdx.x, threadStride);
     __syncthreads();
 }
-__device__
-void restoreOrigin(){
 
+__device__
+void restoreOrigin(singleObj * obj){
+    for(int i=0;i<8;i++)
+        obj->vertices[i] = obj->lastVertices[i];
+    for(int i=0;i<3;i++)
+        obj->translation[i] = obj->lastTransAndRot[i];
+    obj->zrotation = obj->lastTransAndRot[3];
+    obj->boundingBox = obj->lastBoundingBox;
+    //TODO:should restore mask as well
 }
 __device__
 void getTemporalTransAndRot(){
@@ -537,7 +544,7 @@ void Metropolis_Hastings(float* costList,float* shareState, float* temparature, 
 
     sumUp_dataInShare(&costList[startId], &shareState[blockIdx.x]);
     costList[index] = 0;
-    float cpre =0;// getWeightedCost(&sWrapper[0].wObjs[objIndexId], &costList[startId], shareState, sWrapper[0].wRoom->objctNum);
+    float cpre = getWeightedCost(&sWrapper[0].wObjs[objIndexId], &costList[startId], shareState, sWrapper[0].wRoom->objctNum);
     //first thread cost is the best cost of block
     costList[startId] = cpre;
     for(int nt = 0; nt<nTimes; nt++){
@@ -556,12 +563,14 @@ void Metropolis_Hastings(float* costList,float* shareState, float* temparature, 
             p1 = density_function(temparature[blockIdx.x], cpost);
             alpha = fminf(1.0f, p1/p0);
             if(alpha > THREADHOLD_T)
-                restoreOrigin();
+                restoreOrigin(&sWrapper[0].wObjs[objIndexId + pickedIdxs[blockIdx.x]]);
             else if(cpost < costList[blockIdx.x]){
                 getTemporalTransAndRot();
                 costList[startId] = cpost;
                 cpre = cpost;
             }
+        }
+        else{
             pickedIdxs[blockIdx.x] = get_int_random(sWrapper[0].wRoom->objctNum, index);
             shareState[blockIdx.x] = 0;
         }
