@@ -28,6 +28,7 @@ __device__
 void random_along_wall(sharedRoom * room, singleObj * obj);
 __device__ void get_sum_furnitureMsk(unsigned char* mask, int colCount, int rowCount, float * res, int absThreadIdx, int threadStride);
 __device__ void set_obj_zrotation(singleObj * obj, float nrot);
+__device__ bool set_obj_translation(sharedRoom * room, singleObj* obj, float cx, float cy);
 struct sharedWrapper{
     sharedRoom *wRoom;//1
     singleObj *wObjs;//nblocks
@@ -195,9 +196,12 @@ void randomly_perturb(sharedRoom* room, singleObj * obj, unsigned char * mask, f
                     if (obj->alignedTheWall)
                         set_obj_zrotation(obj, room->deviceWalls[get_int_random(room->wallNum, index)].zrotation);
                     else
-                        set_obj_zrotation(obj,0);
+                        set_obj_zrotation(obj, get_float_random(PI, index));
                     break;
                 case 1:
+                    while(set_obj_translation(room, obj,
+                                            get_float_random(room->half_width, index),
+                                            get_float_random(room->half_height, index)));
                     break;
                 case 2:
                     break;
@@ -236,7 +240,24 @@ __device__
 void random_along_wall(sharedRoom * room, singleObj * obj){
 
 }
+__device__
+bool set_obj_translation(sharedRoom * room, singleObj* obj, float cx, float cy){
+    cx = (get_int_random(2) == 0)?cx:-cx;
+    cy = (get_int_random(2) == 0)?cy:-cy;
+    float halfw = obj->boundingBox.width/2, halfh = obj->boundingBox.height/2;
+    if( cx + halfw > room->half_width || cx-halfw < -room->half_width
+     || cy + halfh > room->half_height || cy-halfh < -room->half_height)
+     return false;
 
+    float movex = cx - obj->translation[0], movey = cy-obj->translation[1];
+    obj->translation[0] = cx; obj->translation[1]=cy;
+    for(int i=0; i<4; i++){
+        obj->vertices[2*i]+=movex;
+        obj->vertices[2*i + 1] += movey;
+    }
+    obj->boundingBox.x += movex; obj->boundingBox.y += movey;
+    return true;
+}
 __device__
 void set_obj_zrotation(singleObj * obj, float nrot) {
 	float oldRot = obj->zrotation;
@@ -516,12 +537,12 @@ void Metropolis_Hastings(float* costList,float* shareState, float* temparature, 
 
     sumUp_dataInShare(&costList[startId], &shareState[blockIdx.x]);
     costList[index] = 0;
-    float cpre = getWeightedCost(&sWrapper[0].wObjs[objIndexId], &costList[startId], shareState, sWrapper[0].wRoom->objctNum);
+    float cpre =0;// getWeightedCost(&sWrapper[0].wObjs[objIndexId], &costList[startId], shareState, sWrapper[0].wRoom->objctNum);
     //first thread cost is the best cost of block
     costList[startId] = cpre;
     for(int nt = 0; nt<nTimes; nt++){
         if(pickedIdxs[blockIdx.x] == threadIdx.x){
-            if(nt % 10 == 0)
+            if(nBlocks>1 && nt % 10 == 0)
                 changeTemparature(temparature);
             p0 = density_function(temparature[blockIdx.x], cpre);
         }
