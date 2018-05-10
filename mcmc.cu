@@ -261,7 +261,25 @@ int randomly_perturb(sharedRoom* room, singleObj * objs, int pickedIdx, unsigned
 
 __device__
 void random_along_wall(sharedRoom * room, singleObj * obj){
-
+    wall * swall = &room->deviceWalls[get_int_random(room->wallNum)];
+    float mwidth = (get_int_random(2)==0)?obj->objWidth:obj->objHeight;
+    float mheight = (mwidth == obj->objWidth)? obj->objHeight: obj->objWidth;
+    set_obj_zrotation(obj, swall->zrotation);
+    float width_ran = swall->width - mwidth, height_ran =swall->width-mheight;
+    float rh, rw;
+    int mp = (swall->translation[0] >0 || swall->translation[1]>0)? -1:1;
+    if(fabsf(swall->b) < 0.01){
+        rh = min(swall->vertices[1], swall->vertices[3]) + get_float_random(height_ran) + obj->boundingBox.height/2;
+        set_obj_translation(room, obj, swall->translation[0] + mp*(mwidth/2+0.01), rh);
+    }
+    else if(fabsf(swall->a) < 0.01){
+        rw = min(swall->vertices[0], swall->vertices[2]) + get_float_random(width_ran) + obj->boundingBox.width/2;
+        set_obj_translation(room, obj, rw,swall->translation[1] + mp*(mheight/2+0.01) );
+    }
+    else{
+        //TODO:
+        printf("CANNOT ACCEPT OBLIQUE WALL\n");
+    }
 }
 __device__
 bool set_obj_translation(sharedRoom * room, singleObj* obj, float cx, float cy){

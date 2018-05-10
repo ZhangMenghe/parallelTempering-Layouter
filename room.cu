@@ -16,12 +16,12 @@ void Room::init_a_wall(wall *newWall, vector<float> params) {
 		newWall->b = 0; newWall->a = 1; newWall->c = -ax;
 	}
 	else if (ay == by) {
-		newWall->zrotation = 90;
+		newWall->zrotation = PI/2;
 		newWall->a = 0; newWall->b = 1; newWall->c = -ay;
 	}
 	else {
 		newWall->a = (by - ay) / (bx - ax); newWall->b = -1; newWall->c = -(newWall->a*ax - ay);
-		newWall->zrotation = atanf(newWall->a)/ PI *180;
+		newWall->zrotation = atanf(newWall->a)/ PI;
 	}
 }
 // 4*2 vertices, 2 center, 2 size, angle, label, zheight
@@ -154,7 +154,7 @@ void Room::add_a_wall(vector<float> params){
 	init_a_wall(&newWall, params);
 	walls.push_back(newWall);
 	wallNum++;
-	if (fabs(fmod(newWall.zrotation, 90)) > 0.01)
+	if (fabs(fmod(newWall.zrotation, PI)) > 0.01)
 		update_mask_by_wall(&newWall);
 }
 void Room::add_an_object(vector<float> params, bool isPrevious, bool isFixed) {
