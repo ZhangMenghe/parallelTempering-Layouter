@@ -1,18 +1,16 @@
 #include <iostream>
 #include <string>
-#include<fstream>
+#include <fstream>
 #include <limits.h>
 #include <curand.h>
 #include <curand_kernel.h>
 #include <algorithm>
-// #include "predefinedConstrains.h"
 #include "room.cuh"
-
 #include <time.h>
-#define RES_NUM 1
-#define THREADHOLD_T 0.8
-#define MAX_THREAD_NUM 64
+
 using namespace std;
+
+#define THREADHOLD_T 0.8
 
 const unsigned int nBlocks = 1;
 const unsigned int nThreads = 64;
@@ -27,6 +25,7 @@ __device__ void get_sum_furnitureMsk(unsigned char* mask, int colCount, int rowC
 __device__ void set_obj_zrotation(singleObj * obj, float nrot);
 __device__ bool set_obj_translation(sharedRoom * room, singleObj* obj, float cx, float cy);
 __device__ void storeOrigin(singleObj * obj);
+
 struct sharedWrapper{
     sharedRoom *wRoom;//1
     singleObj *wObjs;//nblocks
@@ -36,6 +35,7 @@ struct sharedWrapper{
     int *wPairRelation;//1
     float * resTransAndRot;//1 for all objs and all blocks
 };
+
 void setUpDevices(){
     int deviceCount = 0;
     cudaGetDeviceCount(&deviceCount);
@@ -74,6 +74,7 @@ void sumUp_dataInShare(float * data, float* res, int bound = nThreads){
     for(; i<bound; i++)
         *res += data[i];
 }
+
 __device__
 float density_function(float beta, float cost) {
     // printf("%f-%f\n", beta, cost);
@@ -488,8 +489,8 @@ void get_obj_reflection(singleObj * obj, const float* focal){
 //Clearance :
 //Mcv(I) that minimize the overlap between furniture(with space)
 __device__
-void cal_clearance_violation(float overlappingArea, float& mcv){
-    mcv = sWrapper[0].wRoom->indepenFurArea - overlappingArea;
+void cal_clearance_violation(sharedRoom * room, float& mcv){
+    mcv = room->indepenFurArea - room->maskArea;
     mcv = (mcv < 0)? 0 : mcv;
 }
 //Circulation:
@@ -503,16 +504,15 @@ void cal_circulation_term(float overlappingAreaPre, float overlappingAreaPost, f
 //Mpd: for example  coffee table and seat
 //mpa: relative direction constraints
 __device__
-void cal_pairwise_relationship(singleObj* objs, float& mpd, float& mpa){
+void cal_pairwise_relationship(sharedRoom*room, singleObj* objs, int * pairs,
+                               int threadStride, float& mpd, float& mpa){
     singleObj * obj1, *obj2;
     float cosfg2;
-    for(int i=0; i<sWrapper[0].wRoom->pairNum; i++){
-        obj1 = &objs[sWrapper[0].wPairRelation[4*i]];
-        obj2 = &objs[sWrapper[0].wPairRelation[4*i+1]];
-        //printf("%d - %d - %d - %d\n",blockIdx.x, threadIdx.x, obj1->id, obj2->id);
+    for(int i=threadIdx.x; i<room->pairNum; i+=threadStride){
+        obj1 = &objs[pairs[4*i]];
+        obj1 = &objs[pairs[4*i + 1]];
         mpd -= t(dist_between_points(obj1->translation, obj2->translation),
-                sWrapper[0].wPairRelation[4*i + 2],
-                sWrapper[0].wPairRelation[4*i + 3]);
+                pairs[4*i + 2], pairs[4*i + 3]);
         cosfg2 = powf((sinf(obj1->zrotation) * sinf(obj2->zrotation)
                     + cosf(obj1->zrotation) * cosf(obj2->zrotation)),2.0f);
         mpa -= 8 * powf(cosfg2, 2) - 8 * cosfg2;
@@ -599,42 +599,43 @@ void cal_emphasis_term2(singleObj *objs, groupMapStruct* gmap, float& msy, float
     }
 }
 __device__
-void calCostParam(singleObj * objs, float* costList){
+void calCostParam(sharedRoom * room, singleObj * objs, float* costList){
     singleObj * obj = &objs[threadIdx.x];
-    for(int i=0; i<sWrapper[0].wRoom->groupNum; i++){
-        for(int j=0; j<sWrapper[0].wRoom->groupMap[i].memNum; j++){
-            if(sWrapper[0].wRoom->groupMap[i].objIds[j] == threadIdx.x){
-                cal_emphasis_term(obj, sWrapper[0].wRoom->groupMap[i].focal, costList[1]);
-                cal_alignment_term(objs, i, j, costList[3], costList[4]);
-                cal_balance_term(obj, costList[7]);
+    for(int i=0; i<room->groupNum; i++){
+        for(int j=0; j<room->groupMap[i].memNum; j++){
+            if(room->groupMap[i].objIds[j] == threadIdx.x){
+                cal_emphasis_term(obj, room->groupMap[i].focal, costList[1]);
+                cal_alignment_term(objs, i, j, costList[2], costList[3]);
+                cal_balance_term(obj, costList[4]);
+                cal_pairwise_relationship(room, objs, sWrapper[0].wPairRelation,
+                                          room->objctNum, costList[5], costList[6]);
             }
         }
     }
     //Each thread work on a group
-    if(threadIdx.x < sWrapper[0].wRoom->groupNum){
-        cal_conversation_term(objs, sWrapper[0].wRoom->groupMap[threadIdx.x].objIds,
-                                sWrapper[0].wRoom->groupMap[threadIdx.x].memNum,
-                              costList[5], costList[6]);
-        cal_emphasis_term2(objs, &sWrapper[0].wRoom->groupMap[threadIdx.x], costList[2]);
+    if(threadIdx.x < room->groupNum){
+        cal_conversation_term(objs, room->groupMap[threadIdx.x].objIds,
+                                room->groupMap[threadIdx.x].memNum,
+                              costList[7], costList[8]);
+        cal_emphasis_term2(objs, &room->groupMap[threadIdx.x], costList[9]);
     }
 }
 __device__
-float getWeightedCost(singleObj* objs, float* costList, float * shareState, int objNum){
+float getWeightedCost(sharedRoom * room, singleObj* objs, float* costList){
     costList[threadIdx.x] = 0;
-    if(threadIdx.x < objNum)
-        calCostParam(objs, costList);
-    else if(threadIdx.x == objNum)
-        cal_pairwise_relationship(objs, costList[10], costList[11]);
-    else
-        //shareState[0] store the sum of furniture mask
-        cal_clearance_violation(shareState[blockIdx.x], costList[9]);
+    if(threadIdx.x < room->objctNum)
+        calCostParam(room, objs, costList);
+    else{
+        cal_circulation_term(room->maskArea, room->maskAreaPerson, costList[11]);
+        cal_clearance_violation(room, costList[11]);
+    }
+    //printf("thread: %d\n", threadIdx.x);
 
-    // TODO: PLEASE MAKE SURE sumUp_dataInShare
     __syncthreads();
-    if(threadIdx.x < WEIGHT_NUM)
-        shareState[blockIdx.x] += weights[threadIdx.x] * costList[1+threadIdx.x];
-    __syncthreads();
-    return shareState[blockIdx.x];
+    float res = 0;
+    for(int i=0; i<WEIGHT_NUM; i++)
+        res += costList[i] *weights[i];
+    return res;
 }
 
 __device__
@@ -650,9 +651,11 @@ void Metropolis_Hastings(float* costList,float* shareState, float* temparature, 
     //sharedRoom* room, singleObj * objs,  unsigned char * mask, float* tmpSlot, int threadStride)
     initial_assignment(room, objsBlock,
                         &sWrapper[0].wMask[maskStart], &sWrapper[0].backMask[maskStart], &costList[startId]);
-    printf("sum of mask: %f\n", room->maskAreaPerson);
+
     costList[index] = 0;
-    float cpre = getWeightedCost(objsBlock, &costList[startId], shareState, room->objctNum);
+    float cpre = getWeightedCost(room, objsBlock, &costList[startId]);
+    if(threadIdx.x == 0)
+        printf("%f\n",cpre );
     //first thread cost is the best cost of block
     costList[startId] = cpre;
     for(int nt = 0; nt<nTimes; nt++){
@@ -665,7 +668,7 @@ void Metropolis_Hastings(float* costList,float* shareState, float* temparature, 
         secondChangeId = randomly_perturb(room, objsBlock, pickedIdxs[blockIdx.x],
                         &sWrapper[0].wMask[maskStart], &costList[startId], shareState);
 
-        cpost = getWeightedCost(objsBlock, &costList[startId], shareState, room->objctNum);
+        cpost = getWeightedCost(room, objsBlock, &costList[startId]);
         costList[index] = 0;
         if(pickedIdxs[blockIdx.x] == threadIdx.x){
             p1 = density_function(temparature[blockIdx.x], cpost);
