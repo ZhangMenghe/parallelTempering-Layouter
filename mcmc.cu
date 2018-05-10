@@ -21,9 +21,7 @@ const unsigned int nTimes = 1;
 
 struct sharedWrapper;
 extern __shared__ sharedWrapper sWrapper[];
-
 __device__ __managed__ float weights[11]={1.0f};
-__device__ __managed__ float resTransAndRot[RES_NUM * 4];
 __device__ void random_along_wall(sharedRoom * room, singleObj * obj);
 __device__ void get_sum_furnitureMsk(unsigned char* mask, int colCount, int rowCount, float * res, int absThreadIdx, int threadStride);
 __device__ void set_obj_zrotation(singleObj * obj, float nrot);
@@ -36,6 +34,7 @@ struct sharedWrapper{
     unsigned char* backMask;//nblocks
     float *wFloats;//1
     int *wPairRelation;//1
+    float * resTransAndRot;//1 for all objs and all blocks
 };
 void setUpDevices(){
     int deviceCount = 0;
@@ -335,8 +334,13 @@ void initial_assignment(sharedRoom* room, singleObj * objs,
             random_along_wall(room, obj);
         else if (obj->alignedTheWall)
             set_obj_zrotation(obj, room->deviceWalls[get_int_random(room->wallNum)].zrotation);
-    }
+        //INITIALIZE COST
+        int singleSize = room->objctNum * 4 + 1;
+        for(int i=0; i<MAX_KEPT_RES; i++){
+            sWrapper[0].resTransAndRot[singleSize*i + threadIdx.x * 4] = INFINITY;
+        }
 
+    }
     __syncthreads();
     //all threads to do update masks
     for (int i = 0; i < room->objctNum; i++) {
@@ -395,8 +399,26 @@ void restoreOrigin(sharedRoom * room, unsigned char* mask, float * tmpSlot, sing
     __syncthreads();
 }
 __device__
-void getTemporalTransAndRot(){
-
+void getTemporalTransAndRot(sharedRoom * room, singleObj* objs, float * results, float cost){
+    float maxCost = results[0];
+    int i = 1, maxPos = 0, singleSize = room->objctNum * 4 + 1;
+    for(i=1; i<MAX_KEPT_RES; i++){
+        if(maxCost == INFINITY)
+            break;
+        if(results[singleSize * i] >maxCost){
+            maxPos=i; maxCost = results[singleSize * i];
+        }
+    }
+    if(cost < maxCost){
+        int baseId = singleSize * maxPos;
+        results[baseId] = cost;
+        for(int i=0; i<room->objctNum; i++){
+            results[baseId + 4*i + 1] = objs[i].translation[0];
+            results[baseId + 4*i + 2] = objs[i].translation[1];
+            results[baseId + 4*i + 3] = objs[i].translation[2];
+            results[baseId + 4*i + 4] = objs[i].zrotation;
+        }
+    }
 }
 __device__
 float t(float d, float m, float M, int a = 2){
@@ -656,7 +678,7 @@ void Metropolis_Hastings(float* costList,float* shareState, float* temparature, 
                                 &objsBlock[secondChangeId]);
             }
             else if(cpost < costList[blockIdx.x]){
-                getTemporalTransAndRot();
+                getTemporalTransAndRot(room, objsBlock, sWrapper[0].resTransAndRot, cpost);
                 costList[startId] = cpost;
                 cpre = cpost;
             }
@@ -726,6 +748,8 @@ void generate_suggestions(Room * m_room){
             gWrapper->wPairRelation[4*i+j]= m_room->actualPairs[i][j];
     }
 
+    int resMem = (m_room->objctNum * 4 + 1) * MAX_KEPT_RES * sizeof(float);
+    cudaMallocManaged(&gWrapper->resTransAndRot, resMem);
 
 	Do_Metropolis_Hastings<<<nBlocks, nThreads, sizeof(*gWrapper)>>>(gWrapper);
 	cudaDeviceSynchronize();

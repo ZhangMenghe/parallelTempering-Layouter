@@ -7,6 +7,8 @@
 
 #define MAX_NUM_OBJS 10
 #define MAX_NUM_WALLS 10
+#define MAX_KEPT_RES 3
+
 #define MAX_SUPPORT_TYPE 10
 #define MAX_GROUP_ALLOW 2
 #define CONSTRAIN_PAIRS 2
