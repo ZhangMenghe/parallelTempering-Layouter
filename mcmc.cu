@@ -33,6 +33,7 @@ struct sharedWrapper{
     sharedRoom *wRoom;//1
     singleObj *wObjs;//nblocks
     unsigned char *wMask;//nblocks
+    unsigned char* backMask;//nblocks
     float *wFloats;//1
     int *wPairRelation;//1
 };
@@ -138,6 +139,14 @@ int binary_search_Inside_Point(int xl, int xr, int mid, int y, float* tmpSlot, c
         xr = mid - 1;
     }
     return xl;
+}
+//update_mask_by_boundingBox(backupMask, rect, room->rowCount/2, room->colCount, threadIdx.x, nThreads, 1);
+__device__
+void update_mask_by_boundingBox(unsigned char* mask, mRect2f boundingBox, int halfRowNum, int colNum, int absThreadIdx, int threadStride, int addition=1){
+    for(int y = boundingBox.y - absThreadIdx; y > boundingBox.y - boundingBox.height; y -= threadStride){
+        for(int x=boundingBox.x; x<boundingBox.x + boundingBox.width; x++)
+            mask[(halfRowNum - y) *colNum  + x] += addition;
+    }
 }
 __device__
 void update_mask_by_object(unsigned char* mask, float* tmpSlot, float * vertices,
@@ -290,9 +299,18 @@ void set_obj_zrotation(singleObj * obj, float nrot) {
 	obj->boundingBox.x = minx; obj->boundingBox.y=maxy;
 	obj->boundingBox.width = maxx-minx; obj->boundingBox.height = maxy-miny;
 }
-
 __device__
-void initial_assignment(sharedRoom* room, singleObj * objs,  unsigned char * mask, float* tmpSlot){
+mRect2f get_circulate_boundingbox(sharedRoom * room, mRect2f* rect){
+     mRect2f nrect;
+     nrect.x = ((rect->x-PERSONSIZE)< -room->half_width)? -room->half_width:rect->x-PERSONSIZE;
+     nrect.y = ((rect->y + PERSONSIZE)> room->half_height)?  room->half_height:rect->y + PERSONSIZE;
+     nrect.width = rect->width+2*PERSONSIZE;
+     nrect.height = rect->height + 2* PERSONSIZE;
+     return nrect;
+}
+__device__
+void initial_assignment(sharedRoom* room, singleObj * objs,
+                        unsigned char * mask,unsigned char * backupMask, float* tmpSlot){
     if(threadIdx.x < room->objctNum){
         singleObj * obj = &objs[threadIdx.x];
         if (obj->adjoinWall)
@@ -303,15 +321,30 @@ void initial_assignment(sharedRoom* room, singleObj * objs,  unsigned char * mas
 
     __syncthreads();
     //all threads to do update masks
-    for (int i = 0; i < room->freeObjNum; i++) {
-        update_mask_by_object(mask, tmpSlot, objs[room->freeObjIds[i]].vertices, objs[room->freeObjIds[i]].boundingBox,
+    for (int i = 0; i < room->objctNum; i++) {
+        update_mask_by_object(mask, tmpSlot, objs[i].vertices, objs[i].boundingBox,
                               room->rowCount/2, room->colCount,
                               threadIdx.x, nThreads, 1);
-    }
-    tmpSlot[threadIdx.x] = 0;
 
-    //get_sum_furnitureMsk(mask, room->colCount, room->rowCount, &tmpSlot[threadIdx.x], threadIdx.x, threadStride);
+        mRect2f rect = get_circulate_boundingbox(room, &objs[i].boundingBox);
+
+        update_mask_by_boundingBox(backupMask, rect, room->rowCount/2, room->colCount, threadIdx.x, nThreads, 1);
+    }
+    //area of overlappingArea
+    tmpSlot[threadIdx.x] = 0;
+    get_sum_furnitureMsk(mask, room->colCount, room->rowCount, &tmpSlot[threadIdx.x], threadIdx.x, nThreads);
+
     __syncthreads();
+
+    sumUp_dataInShare(tmpSlot, &room->maskArea);
+
+    //area of circulation
+    tmpSlot[threadIdx.x] = 0;
+    get_sum_furnitureMsk(backupMask, room->colCount, room->rowCount, &tmpSlot[threadIdx.x], threadIdx.x, nThreads);
+
+    __syncthreads();
+
+    sumUp_dataInShare(tmpSlot, &room->maskAreaPerson);
 }
 
 __device__
@@ -422,8 +455,9 @@ void cal_clearance_violation(float overlappingArea, float& mcv){
 //Circulation:
 //Mci support circulation through the room and access to all of the furniture.
 __device__
-void cal_circulation_term(unsigned char* mask, unsigned char* dest, float& mci){
-    mci = 0;
+void cal_circulation_term(float overlappingAreaPre, float overlappingAreaPost, float& mci){
+    mci = (overlappingAreaPost - overlappingAreaPre) / overlappingAreaPost * sWrapper[0].wRoom->mskCount;
+
 }
 //Pairwise relationships:
 //Mpd: for example  coffee table and seat
@@ -551,12 +585,10 @@ float getWeightedCost(singleObj* objs, float* costList, float * shareState, int 
         calCostParam(objs, costList);
     else if(threadIdx.x == objNum)
         cal_pairwise_relationship(objs, costList[10], costList[11]);
-    else {
-        //cal_circulation_term(shareState[0], costList[8]);
+    else
         //shareState[0] store the sum of furniture mask
         cal_clearance_violation(shareState[blockIdx.x], costList[9]);
-    }
-    //else do nothing, empty the first #numofObjs slots
+
     // TODO: PLEASE MAKE SURE sumUp_dataInShare
     __syncthreads();
     if(threadIdx.x < WEIGHT_NUM)
@@ -568,17 +600,19 @@ float getWeightedCost(singleObj* objs, float* costList, float * shareState, int 
 __device__
 void Metropolis_Hastings(float* costList,float* shareState, float* temparature, int* pickedIdxs, int objIndexId){
     float cpost, p0, p1, alpha;
+    singleObj * objsBlock = &sWrapper[0].wObjs[objIndexId];
+    sharedRoom * room = sWrapper[0].wRoom;
     int startId = blockIdx.x * nThreads;
     int index = startId + threadIdx.x;
+    int maskStart =sWrapper[0].wRoom->mskCount * blockIdx.x;
     int secondChangeId;
-    //sharedRoom* room, singleObj * objs,  unsigned char * mask, float* tmpSlot, int threadStride)
-    initial_assignment(sWrapper[0].wRoom, &sWrapper[0].wObjs[objIndexId],
-                        &sWrapper[0].wMask[sWrapper[0].wRoom->mskCount * blockIdx.x],
-                        &costList[startId]);
 
-    sumUp_dataInShare(&costList[startId], &shareState[blockIdx.x]);
+    //sharedRoom* room, singleObj * objs,  unsigned char * mask, float* tmpSlot, int threadStride)
+    initial_assignment(room, objsBlock,
+                        &sWrapper[0].wMask[maskStart], &sWrapper[0].backMask[maskStart], &costList[startId]);
+    printf("sum of mask: %f\n", room->maskAreaPerson);
     costList[index] = 0;
-    float cpre = getWeightedCost(&sWrapper[0].wObjs[objIndexId], &costList[startId], shareState, sWrapper[0].wRoom->objctNum);
+    float cpre = getWeightedCost(objsBlock, &costList[startId], shareState, room->objctNum);
     //first thread cost is the best cost of block
     costList[startId] = cpre;
     for(int nt = 0; nt<nTimes; nt++){
@@ -588,20 +622,20 @@ void Metropolis_Hastings(float* costList,float* shareState, float* temparature, 
             p0 = density_function(temparature[blockIdx.x], cpre);
         }
         shareState[blockIdx.x] = 0;
-        secondChangeId = randomly_perturb(sWrapper[0].wRoom, &sWrapper[0].wObjs[objIndexId],pickedIdxs[blockIdx.x],
-                        &sWrapper[0].wMask[sWrapper[0].wRoom->mskCount * blockIdx.x], &costList[startId], shareState);
+        secondChangeId = randomly_perturb(room, objsBlock, pickedIdxs[blockIdx.x],
+                        &sWrapper[0].wMask[maskStart], &costList[startId], shareState);
 
-        cpost = getWeightedCost(&sWrapper[0].wObjs[objIndexId], &costList[startId], shareState, sWrapper[0].wRoom->objctNum);
+        cpost = getWeightedCost(objsBlock, &costList[startId], shareState, room->objctNum);
         costList[index] = 0;
         if(pickedIdxs[blockIdx.x] == threadIdx.x){
             p1 = density_function(temparature[blockIdx.x], cpost);
             alpha = fminf(1.0f, p1/p0);
             if(alpha > THREADHOLD_T){
-                restoreOrigin(sWrapper[0].wRoom, &sWrapper[0].wMask[sWrapper[0].wRoom->mskCount * blockIdx.x],&costList[startId],
-                                &sWrapper[0].wObjs[objIndexId + pickedIdxs[blockIdx.x]]);
+                restoreOrigin(room, &sWrapper[0].wMask[maskStart],&costList[startId],
+                                &objsBlock[pickedIdxs[blockIdx.x]]);
                 if(secondChangeId!=-1)
-                    restoreOrigin(sWrapper[0].wRoom, &sWrapper[0].wMask[sWrapper[0].wRoom->mskCount * blockIdx.x],&costList[startId],
-                                &sWrapper[0].wObjs[objIndexId + secondChangeId]);
+                    restoreOrigin(room, &sWrapper[0].wMask[maskStart],&costList[startId],
+                                &objsBlock[secondChangeId]);
             }
             else if(cpost < costList[blockIdx.x]){
                 getTemporalTransAndRot();
@@ -610,7 +644,7 @@ void Metropolis_Hastings(float* costList,float* shareState, float* temparature, 
             }
         }
         else{
-            pickedIdxs[blockIdx.x] = get_int_random(sWrapper[0].wRoom->objctNum, index);
+            pickedIdxs[blockIdx.x] = get_int_random(room->objctNum, index);
             shareState[blockIdx.x] = 0;
         }
         __syncthreads();
@@ -625,10 +659,10 @@ void Do_Metropolis_Hastings(sharedWrapper *gWrapper){
             int objId = blockIdx.x * sWrapper[0].wRoom->objctNum + threadIdx.x;
             sWrapper[0].wObjs[objId] = sWrapper[0].wObjs[threadIdx.x];
         }
-        //can be optimized
-        if(threadIdx.x == 0){
-            for(int i=0; i<sWrapper[0].wRoom->mskCount; i++)
-                sWrapper[0].wMask[blockIdx.x *sWrapper[0].wRoom->mskCount + i] = sWrapper[0].wMask[i];
+        int baseId = blockIdx.x *sWrapper[0].wRoom->mskCount;
+        for(int i=threadIdx.x; i<sWrapper[0].wRoom->rowCount; i+=nThreads){
+            for(int j=0;j<sWrapper[0].wRoom->colCount;j++)
+                sWrapper[0].wMask[baseId + i * sWrapper[0].wRoom->colCount + j] = sWrapper[0].wMask[i * sWrapper[0].wRoom->colCount + j];
         }
     }
 
@@ -658,9 +692,11 @@ void generate_suggestions(Room * m_room){
 	for(int i=0; i<m_room->objctNum; i++)
 		gWrapper->wObjs[i] = m_room->objects[i];
 
-    int tMem = m_room->colCount * m_room->rowCount * sizeof(unsigned char);
+    int tMem = gWrapper->wRoom->mskCount * sizeof(unsigned char);
     cudaMallocManaged(&gWrapper->wMask, nBlocks *tMem);
     cudaMemcpy(gWrapper->wMask, m_room->furnitureMask, tMem, cudaMemcpyHostToDevice);
+    cudaMallocManaged(&gWrapper->backMask, nBlocks *tMem);
+    cudaMemset(gWrapper->backMask, 0, nBlocks*tMem);
 
 	int floatMem =  nBlocks *(3+nThreads) * sizeof(float);
     cudaMallocManaged(&gWrapper->wFloats, floatMem);
@@ -709,7 +745,7 @@ void setupDebugRoom(Room* room){
     room->add_a_wall(vector<float>(wallParam1,wallParam1 + 4));
     room->add_a_wall(vector<float>(wallParam2,wallParam2 + 4));
     room->add_an_object(vector<float>(objParam,objParam + 7));
-    room->add_an_object(vector<float>(objParam,objParam + 7));
+    //room->add_an_object(vector<float>(objParam,objParam + 7));
     room->add_a_focal_point(vector<float>(fpParam,fpParam + 3));
     //room->objects[0].alignedTheWall = true;
     for(int i=0;i<11;i++)

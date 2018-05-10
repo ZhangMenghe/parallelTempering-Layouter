@@ -63,6 +63,7 @@ struct sharedRoom{
 	float RoomCenter[3];
 	int colCount, rowCount, mskCount;
 	int pairNum, groupNum;
+	float maskArea, maskAreaPerson;
 	groupMapStruct groupMap[MAX_GROUP_ALLOW];
 	pairMapStruct pairMap[CONSTRAIN_PAIRS];
 	wall deviceWalls[MAX_NUM_WALLS];

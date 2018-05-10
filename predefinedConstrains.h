@@ -14,7 +14,7 @@
 
 #define REFLECT_K 0
 
-#define PersonSize 40//40cm x 40 cm
+#define PERSONSIZE 20//40cm x 40 cm
 #define BEDSIDE_DIST 91//currently not considered
 #define CABINET_DIST 61
 #define DINING_DIST 91
