@@ -48,11 +48,13 @@ void Room::init_an_object(vector<float>params, bool isFixed, bool isPrevious) {
 		// update_obj_boundingBox_and_vertices(obj, 0);
 
 	indepenFurArea += obj.objWidth * obj.objHeight; //get_single_obj_maskArea(obj.vertices);
-
 	int gidx = 0;
 	for(; gidx<groupNum; gidx++){
-		if(groupMap[gidx].gid == params[15])
+		if(groupMap[gidx].gid == params[15]){
 			groupMap[gidx].objIds[groupMap[gidx].memNum++] = obj.id;
+			break;
+		}
+
 	}
 	if(gidx == groupNum){
 		groupMap[groupNum].gid = params[15];
