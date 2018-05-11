@@ -69,6 +69,13 @@ void rot_around_a_point(float center[3], float * x, float * y, float s, float c)
 }
 
 __device__
+float sumUp_weighted_dataInShare(float* data, float* weights, int bound){
+    float res = 0;
+    for(int i=0; i<bound; i++)
+        res += data[i] * weights[i];
+    return res;
+}
+__device__
 void sumUp_dataInShare(float * data, float* res, int bound = nThreads){
     int i = (*res ==0)?0:1;
     for(; i<bound; i++)
@@ -331,10 +338,16 @@ void initial_assignment(sharedRoom* room, singleObj * objs,
                         unsigned char * mask,unsigned char * backupMask, float* tmpSlot){
     if(threadIdx.x < room->objctNum){
         singleObj * obj = &objs[threadIdx.x];
-        if (obj->adjoinWall)
+        if (obj->adjoinWall){
             random_along_wall(room, obj);
-        else if (obj->alignedTheWall)
+            //printf("center: %f - %f, rot: %f\n", obj->translation[0],obj->translation[1], obj->zrotation );
+        }
+
+        else if (obj->alignedTheWall){
             set_obj_zrotation(obj, room->deviceWalls[get_int_random(room->wallNum)].zrotation);
+            //printf("center: %f - %f, rot: %f\n", obj->translation[0],obj->translation[1], obj->zrotation );
+        }
+
         //INITIALIZE COST
         int singleSize = room->objctNum * 4 + 1;
         for(int i=0; i<MAX_KEPT_RES; i++){
@@ -491,14 +504,15 @@ void get_obj_reflection(singleObj * obj, const float* focal){
 __device__
 void cal_clearance_violation(sharedRoom * room, float& mcv){
     mcv = room->indepenFurArea - room->maskArea;
+    //printf("%f - %f\n", room->indepenFurArea, room->maskArea);
     mcv = (mcv < 0)? 0 : mcv;
 }
 //Circulation:
 //Mci support circulation through the room and access to all of the furniture.
 __device__
 void cal_circulation_term(float overlappingAreaPre, float overlappingAreaPost, float& mci){
-    mci = (overlappingAreaPost - overlappingAreaPre) / overlappingAreaPost * sWrapper[0].wRoom->mskCount;
-
+    mci += (overlappingAreaPost - overlappingAreaPre) / overlappingAreaPost * sWrapper[0].wRoom->mskCount;
+    //printf("a1: %f - a2: %f - mci: %f\n", overlappingAreaPre, overlappingAreaPost, mci);
 }
 //Pairwise relationships:
 //Mpd: for example  coffee table and seat
@@ -571,6 +585,7 @@ void cal_alignment_term(singleObj * objs, int gid, int mid, float& mfa, float&mw
         obj2 = &objs[threadIdx.x + k];
         mfa -= cosf(4 * (obj1->zrotation - obj2->zrotation));
     }
+    //printf("mwa : %f  mfa: %f\n", mwa, mfa);
 }
 //Emphasis:
 //compute focal center
@@ -579,7 +594,9 @@ void cal_emphasis_term(singleObj * obj, const float * focal, float& mef){
     if(focal[0] == INFINITY)
         return;
     get_obj_reflection(obj, focal);
+    //printf("reflect: %f - %f - %f \n", obj->refPos[0], obj->refPos[1], obj->refRot);
     float dist = dist_between_points(focal, obj->translation);
+    //printf("distance: %f\n",dist );
     mef -= (focal[0] - obj->translation[0])/dist * cosf(obj->zrotation)
           + (focal[1] - obj->translation[1])/dist * sinf(obj->zrotation);
 }
@@ -599,43 +616,51 @@ void cal_emphasis_term2(singleObj *objs, groupMapStruct* gmap, float& msy, float
     }
 }
 __device__
-void calCostParam(sharedRoom * room, singleObj * objs, float* costList){
-    singleObj * obj = &objs[threadIdx.x];
-    for(int i=0; i<room->groupNum; i++){
-        for(int j=0; j<room->groupMap[i].memNum; j++){
-            if(room->groupMap[i].objIds[j] == threadIdx.x){
-                cal_emphasis_term(obj, room->groupMap[i].focal, costList[1]);
-                cal_alignment_term(objs, i, j, costList[2], costList[3]);
-                cal_balance_term(obj, costList[4]);
-                cal_pairwise_relationship(room, objs, sWrapper[0].wPairRelation,
-                                          room->objctNum, costList[5], costList[6]);
+void displayResult(float * costList){
+    printf("emphasis: %f\n", costList[1] );
+    printf("alignment: %f - %f\n", costList[2], costList[3] );
+    printf("balance: %f\n", costList[4] );
+    printf("pairs: %f - %f\n", costList[5], costList[6] );
+    printf("emphasis2: %f\n", costList[9] );
+    printf("conversation: %f - %f\n",costList[7], costList[8]);
+    printf("circulation: %f\n", costList[10] );
+    printf("clearance: %f\n", costList[11] );
+}
+
+__device__
+void getWeightedCost(sharedRoom * room, singleObj* objs, float* costList){
+    costList[threadIdx.x] = 0;
+    if(threadIdx.x < room->objctNum){
+        singleObj * obj = &objs[threadIdx.x];
+        for(int i=0; i<room->groupNum; i++){
+            for(int j=0; j<room->groupMap[i].memNum; j++){
+                if(room->groupMap[i].objIds[j] == threadIdx.x){
+                    cal_emphasis_term(obj, room->groupMap[i].focal, costList[1]);
+                    cal_alignment_term(objs, i, j,  costList[2], costList[3]);
+
+                    cal_balance_term(obj, costList[4]);
+                    cal_pairwise_relationship(room, objs, sWrapper[0].wPairRelation,
+                                              room->objctNum, costList[5], costList[6]);
+                }
             }
         }
+
+        //Each thread work on a group
+        if(threadIdx.x < room->groupNum){
+            cal_conversation_term(objs, room->groupMap[threadIdx.x].objIds,
+                                    room->groupMap[threadIdx.x].memNum,
+                                  costList[7], costList[8]);
+            cal_emphasis_term2(objs, &room->groupMap[threadIdx.x], costList[9]);
+        }
+
     }
-    //Each thread work on a group
-    if(threadIdx.x < room->groupNum){
-        cal_conversation_term(objs, room->groupMap[threadIdx.x].objIds,
-                                room->groupMap[threadIdx.x].memNum,
-                              costList[7], costList[8]);
-        cal_emphasis_term2(objs, &room->groupMap[threadIdx.x], costList[9]);
-    }
-}
-__device__
-float getWeightedCost(sharedRoom * room, singleObj* objs, float* costList){
-    costList[threadIdx.x] = 0;
-    if(threadIdx.x < room->objctNum)
-        calCostParam(room, objs, costList);
-    else{
-        cal_circulation_term(room->maskArea, room->maskAreaPerson, costList[11]);
+    else if(threadIdx.x == room->objctNum){
+        cal_circulation_term(room->maskArea, room->maskAreaPerson, costList[10]);
+        printf("circulation: %f\n", costList[10]);
         cal_clearance_violation(room, costList[11]);
     }
-    //printf("thread: %d\n", threadIdx.x);
 
-    __syncthreads();
-    float res = 0;
-    for(int i=0; i<WEIGHT_NUM; i++)
-        res += costList[i] *weights[i];
-    return res;
+        //printf("clearance : %f\n", costList[11]);
 }
 
 __device__
@@ -652,10 +677,16 @@ void Metropolis_Hastings(float* costList,float* shareState, float* temparature, 
     initial_assignment(room, objsBlock,
                         &sWrapper[0].wMask[maskStart], &sWrapper[0].backMask[maskStart], &costList[startId]);
 
-    costList[index] = 0;
-    float cpre = getWeightedCost(room, objsBlock, &costList[startId]);
+
+    getWeightedCost(room, objsBlock, &costList[startId]);
+    __syncthreads();
     if(threadIdx.x == 0)
-        printf("%f\n",cpre );
+        displayResult(&costList[startId]);
+
+
+    float cpre = sumUp_weighted_dataInShare(&costList[startId+1], weights, WEIGHT_NUM);
+    //if(threadIdx.x == 0)
+    //    printf("%f\n",cpre );
     //first thread cost is the best cost of block
     costList[startId] = cpre;
     for(int nt = 0; nt<nTimes; nt++){
@@ -668,7 +699,7 @@ void Metropolis_Hastings(float* costList,float* shareState, float* temparature, 
         secondChangeId = randomly_perturb(room, objsBlock, pickedIdxs[blockIdx.x],
                         &sWrapper[0].wMask[maskStart], &costList[startId], shareState);
 
-        cpost = getWeightedCost(room, objsBlock, &costList[startId]);
+        cpost = 0;//getWeightedCost(room, objsBlock, &costList[startId]);
         costList[index] = 0;
         if(pickedIdxs[blockIdx.x] == threadIdx.x){
             p1 = density_function(temparature[blockIdx.x], cpost);
@@ -695,7 +726,7 @@ void Metropolis_Hastings(float* costList,float* shareState, float* temparature, 
 }
 
 __global__
-void Do_Metropolis_Hastings(sharedWrapper *gWrapper){
+void Do_Metropolis_Hastings(sharedWrapper *gWrapper, float * gArray){
     sWrapper[0] = *gWrapper;
     if(blockIdx.x !=0 ){
         if(threadIdx.x < sWrapper[0].wRoom->objctNum){
@@ -719,6 +750,7 @@ void Do_Metropolis_Hastings(sharedWrapper *gWrapper){
     // printf("%d\n", pickedIdxs[blockIdx.x]);
     Metropolis_Hastings(costList,shareState, temparature, pickedIdxs, blockIdx.x * sWrapper[0].wRoom->objctNum);
     __syncthreads();
+    gArray[threadIdx.x] = costList[threadIdx.x];
 }
 
 
@@ -754,9 +786,12 @@ void generate_suggestions(Room * m_room){
     int resMem = (m_room->objctNum * 4 + 1) * MAX_KEPT_RES * sizeof(float);
     cudaMallocManaged(&gWrapper->resTransAndRot, resMem);
 
-	Do_Metropolis_Hastings<<<nBlocks, nThreads, sizeof(*gWrapper)>>>(gWrapper);
+    float * gArray;
+    cudaMallocManaged(&gArray, nThreads * sizeof(float));
+	Do_Metropolis_Hastings<<<nBlocks, nThreads, sizeof(*gWrapper)>>>(gWrapper, gArray);
 	cudaDeviceSynchronize();
-
+    for(int i=0; i< WEIGHT_NUM; i++)
+        cout<< "threadIdx: "<< i<< "  = " << gArray[i]<<endl;
     cudaFree(gWrapper->wRoom);
     cudaFree(gWrapper->wObjs);
     cudaFree(gWrapper->wMask);
@@ -782,7 +817,7 @@ void startToProcess(Room * m_room){
 void setupDebugRoom(Room* room){
     float wallParam1[] = {-200, 150, 200, 150};
     float wallParam2[] = {-200, -150, 200, -150};
-    float objParam[] = {0, 0, 100, 50, 0, 0, 10};
+    float objParam[] = {-50, 0, 100, 50, 0, 0, 10};
     float fpParam[] = {0, 150, 0};
     float mWeights[] = {1, 1.0, 3.0, 2.0, 1.0, 1.0, 1.0, 3.0, 3.0, 1.0, 0.5};
 
@@ -792,7 +827,7 @@ void setupDebugRoom(Room* room){
     room->add_an_object(vector<float>(objParam,objParam + 7));
     //room->add_an_object(vector<float>(objParam,objParam + 7));
     room->add_a_focal_point(vector<float>(fpParam,fpParam + 3));
-    //room->objects[0].alignedTheWall = true;
+    room->objects[0].alignedTheWall = true;
     for(int i=0;i<11;i++)
         weights[i] = mWeights[i];
     for(int i=0; i< room->objctNum-1; i++){

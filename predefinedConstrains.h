@@ -14,7 +14,7 @@
 #define CONSTRAIN_PAIRS 2
 #define WEIGHT_NUM 11
 
-#define REFLECT_K 0
+#define REFLECT_K INFINITY
 
 #define PERSONSIZE 20//40cm x 40 cm
 #define BEDSIDE_DIST 91//currently not considered

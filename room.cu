@@ -35,7 +35,6 @@ void Room::init_an_object(vector<float>params, bool isFixed, bool isPrevious) {
 	obj.objWidth = params[10];
 	obj.objHeight = params[11];
 	set_obj_zrotation(&obj, params[12] * ANGLE_TO_RAD_F);
-	cout<<"boundingBox: "<<obj.boundingBox.y<< " "<< obj.boundingBox.height<<endl;
 	//obj.zrotation = params[12] * ANGLE_TO_RAD_F;
 	obj.catalogId = params[13];
 	obj.zheight = params[14];
