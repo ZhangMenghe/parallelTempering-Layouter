@@ -13,7 +13,7 @@ using namespace std;
 #define THREADHOLD_T 0.8
 
 const unsigned int nBlocks = 16;
-const unsigned int nThreads = 64;
+const unsigned int nThreads = 32;//it's werid
 const unsigned int WHICH_GPU = 0;
 const unsigned int nTimes = 100;
 
@@ -683,9 +683,11 @@ void Metropolis_Hastings(float* costList, float* temparature, int*pickedupIds){
     int index = startId + threadIdx.x;
     int maskStart =sWrapper[0].wRoom->mskCount * blockIdx.x;
     int secondChangeId,pickedId;
+
     //sharedRoom* room, singleObj * objs,  unsigned char * mask, float* tmpSlot, int threadStride)
     initial_assignment(room, objsBlock,
                         &sWrapper[0].wMask[maskStart], &sWrapper[0].backMask[maskStart], &costList[startId]);
+
 
     getWeightedCost(room, objsBlock, &costList[startId]);
     __syncthreads();
@@ -698,8 +700,14 @@ void Metropolis_Hastings(float* costList, float* temparature, int*pickedupIds){
                 changeTemparature(temparature);
             p0 = density_function(temparature[blockIdx.x], cpre);
         }
-        //todo: randomly select???
-        pickedId = blockIdx.x % room->objctNum;
+
+        pickedId = pickedupIds[blockIdx.x];
+        __syncthreads();
+        // if(blockIdx.x == 0)
+        //     printf("threadIdx: %d, nTimes: %d\n", threadIdx.x, nt);
+        if(threadIdx.x == 0)
+            pickedupIds[blockIdx.x] = get_int_random(room->objctNum);
+
         secondChangeId = randomly_perturb(room, objsBlock, pickedId,
                         &sWrapper[0].wMask[maskStart], &sWrapper[0].backMask[maskStart], &costList[startId]);
 
@@ -724,10 +732,8 @@ void Metropolis_Hastings(float* costList, float* temparature, int*pickedupIds){
                 getTemporalTransAndRot(room, objsBlock, sWrapper[0].resTransAndRot, cpost);
                 cpre = cpost;
             }
-
-        }
-        __syncthreads();
-    }
+        }//end thread 0
+    }//end for
 }
 
 __global__
@@ -752,6 +758,7 @@ void Do_Metropolis_Hastings(sharedWrapper *gWrapper, float * gArray){
 	temparature[blockIdx.x] = -get_float_random(10);
     for(int i=threadIdx.x; i<nTimes; i+=nThreads)
         pickedupIds[i] = get_int_random(sWrapper[0].wRoom->objctNum);
+
 
     Metropolis_Hastings(costList, temparature, pickedupIds);
 
@@ -793,7 +800,7 @@ void generate_suggestions(Room * m_room){
     cudaMallocManaged(&gWrapper->backMask, nBlocks *tMem);
     cudaMemset(gWrapper->backMask, 0, nBlocks*tMem);
 
-	int floatMem =  (nBlocks *(2+nThreads) + nTimes) * sizeof(float);
+	int floatMem =  (nBlocks *(2+nThreads)) * sizeof(float);
     cudaMallocManaged(&gWrapper->wFloats, floatMem);
 
     int pairMem = m_room->actualPairs.size() * 4 * sizeof(int);
