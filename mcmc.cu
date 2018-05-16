@@ -16,7 +16,6 @@ const unsigned int nTimes = 100;
 
 struct sharedWrapper;
 extern __shared__ sharedWrapper sWrapper[];
-// __device__ __managed__ float weights[11]={1.0f};
 
 struct sharedWrapper{
     sharedRoom *wRoom;//1
