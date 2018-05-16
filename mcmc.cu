@@ -20,6 +20,8 @@ const unsigned int nTimes = 100;
 struct sharedWrapper;
 extern __shared__ sharedWrapper sWrapper[];
 __device__ __managed__ float weights[11]={1.0f};
+void display_suggestions(Room* room, float *resTransAndRot);
+
 __device__ void random_along_wall(sharedRoom * room, singleObj * obj);
 __device__ void get_sum_furnitureMsk(unsigned char* mask, int colCount, int rowCount, float * res, int absThreadIdx, int threadStride);
 __device__ void set_obj_zrotation(singleObj * obj, float nrot);
@@ -830,7 +832,7 @@ void generate_suggestions(Room * m_room){
             cout<<res<<endl;
         }
     }
-
+    display_suggestions(m_room, gWrapper->resTransAndRot);
     cudaFree(gWrapper->wRoom);
     cudaFree(gWrapper->wObjs);
     cudaFree(gWrapper->wMask);
@@ -848,7 +850,7 @@ void startToProcess(Room * m_room){
     clock_t start, finish;
     float costtime;
     start = clock();
-
+    cout<<"roomsize"<<m_room->half_width<<endl;
 	generate_suggestions(m_room);
 
     finish = clock();
@@ -856,6 +858,7 @@ void startToProcess(Room * m_room){
     cout<<"Runtime: "<<costtime<<endl;
 }
 void setupDebugRoom(Room* room){
+
     float wallParam1[] = {-200, 150, 200, 150};
     float wallParam2[] = {-200, -150, 200, -150};
     float objParam[] = {-50, 0, 100, 50, 0, 0, 10};
@@ -863,8 +866,7 @@ void setupDebugRoom(Room* room){
     float deskParam[] = {0, 0, 40, 100, 0, 7, 10};
     float fpParam[] = {0, 150, 0};
     float mWeights[] = {1.0f, 0.01f, 0.01f, 0.1f, 1.0f, 1.0f, 1.0f, 1.0f, 0.01f, 1.0f, 1.0f};
-
-    room->initialize_room();
+    room->initialize_room(400.0f, 300.0f);
     room->add_a_wall(vector<float>(wallParam1,wallParam1 + 4));
     room->add_a_wall(vector<float>(wallParam2,wallParam2 + 4));
     room->add_an_object(vector<float>(objParam,objParam + 7));
@@ -939,6 +941,57 @@ void parser_inputfile(const char* filename, Room * parser_inputfile) {
         }
     }
 }
+
+string getPureNumFromVector(float * vertices, int length) {
+	string res = "";
+	for (int i = 0; i < length; i++)
+		res += to_string(vertices[i]) + " ";
+	return res;
+}
+
+void display_suggestions(Room* room, float *resTransAndRot) {
+    ofstream outfile;
+	outfile.open("E:/recommendation.txt", 'w');
+	outfile << "RoomSize: "<<to_string(int(room->half_width*2))<<" "<<to_string(int(room->half_height*2))<<"\r\n";
+	if (outfile.is_open()) {
+		outfile << "WALL_Id zheight vertices zrotation\r\n";
+		for (int i = 0; i < room->wallNum; i++) {
+			wall * tmp = &room->walls[i];
+			outfile << to_string(tmp->id) << " " <<tmp->zheight<<" "<< getPureNumFromVector (tmp->vertices, 4)<<tmp->zrotation<<"\r\n";
+		}
+
+        int singleSize = 4*room->objctNum + 1;
+		for (int i = 0; i < room->objctNum; i++) {
+			outfile << "FURNITURE_Id Category Height ObjWidth ObjHeight\r\n";
+			singleObj *tmp = &room->objects[i];
+			outfile << tmp->id << " " << tmp->catalogId  << " "<<tmp->zheight<< " "<<tmp->objWidth<< " "<<tmp->objHeight;
+
+			outfile << "\r\n";
+            int objoffset = 4*i+1;
+			for (int res=0, startId=0; res<MAX_KEPT_RES; res++, startId=res*singleSize)
+                outfile << "Recommendation" << res << " " << getPureNumFromVector(&resTransAndRot[startId+objoffset], 4)<< "\r\n";
+		}
+		outfile << "Obstacle Vertices\r\n";
+		string obstacleContent = "";
+		for (int i = 0; i < room->obstacles.size(); i++) {
+
+			for (int j = 0; j < 8; j++)
+				obstacleContent += to_string(room->obstacles[i][j]) + " ";
+			obstacleContent += "\r\n";
+		}
+		outfile << obstacleContent;
+		outfile << "Point_Focal Position\r\n";
+        for(int i=0;i<room->groupNum;i++){
+            groupMapStruct * gmap = & room->groupMap[i];
+            if(gmap->focal[0]!=INFINITY)
+                outfile<<getPureNumFromVector(gmap->focal, 3)<<endl;
+        }
+		outfile.close();
+	}
+	else
+		exit(-1);
+
+}
 int main(int argc, char** argv){
     char* filename;
     /*if (argc < 2) {
@@ -954,6 +1007,7 @@ int main(int argc, char** argv){
 	r = strcpy_s(existance_file, 100, "E:/fixedObj.txt");
 	Room* parserRoom = new Room();
     setupDebugRoom(parserRoom);
+
 	// parser_inputfile(filename, parserRoom);
 	// parser_inputfile(existance_file, room, weights);
 	// if (parserRoom != nullptr && (parserRoom->objctNum != 0 || parserRoom->wallNum != 0))
