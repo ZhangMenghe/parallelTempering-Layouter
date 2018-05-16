@@ -1,10 +1,23 @@
 #include<iostream>
 #include "room.cuh"
-#include "utils.cuh"
+
 #include "math.h"
 
 using namespace std;
+__device__ __host__
+void rot_around_point(float center[3], float * x, float * y, float s, float c) {
+	// translate point back to origin:
+	*x -= center[0];
+	*y -= center[1];
 
+	// rotate point
+	float xnew = *x * c - *y * s;
+	float ynew = *x * s + *y * c;
+
+	// translate point back:
+	*x = xnew + center[0];
+	*y = ynew + center[1];
+}
 //ax,ay,bx,by
 void Room::init_a_wall(wall *newWall, vector<float> params) {
 	float ax = params[0], ay = params[1], bx = params[2], by = params[3];
