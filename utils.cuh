@@ -45,7 +45,7 @@ void sumUp_dataInShare(float * data, float* res, int bound){
 
 __device__
 float density_function(float beta, float cost) {
-    // printf("%f-%f\n", beta, cost);
+    //printf("%f\n", beta*cost);
 	return exp2f(-beta * cost);
 }
 

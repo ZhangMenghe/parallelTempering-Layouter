@@ -157,15 +157,15 @@ void cal_emphasis_term2(singleObj *objs, groupMapStruct* gmap, float& msy, float
     }
 }
 __device__
-void displayResult(float * costList){
-    printf("emphasis: %f\n", costList[1] );
-    printf("alignment: %f - %f\n", costList[2], costList[3] );
-    printf("balance: %f\n", costList[4] );
-    printf("pairs: %f - %f\n", costList[5], costList[6] );
-    printf("emphasis2: %f\n", costList[9] );
-    printf("conversation: %f - %f\n",costList[7], costList[8]);
-    printf("circulation: %f\n", costList[10] );
-    printf("clearance: %f\n", costList[11] );
+void displayResult(float * costList, float*weights){
+    printf("emphasis: %f\n", costList[1]*weights[0] );
+    printf("alignment: %f - %f\n", costList[2]*weights[1] , costList[3]*weights[2]  );
+    printf("balance: %f\n", costList[4]*weights[3]  );
+    printf("pairs: %f - %f\n", costList[5]*weights[4] , costList[6]*weights[5]  );
+    printf("conversation: %f - %f\n",costList[7]*weights[6] , costList[8]*weights[7] );
+	printf("emphasis2: %f\n", costList[9]*weights[8]  );
+    printf("circulation: %f\n", costList[10]*weights[9]  );
+    printf("clearance: %f\n", costList[11]*weights[10]  );
     printf("\n" );
 }
 

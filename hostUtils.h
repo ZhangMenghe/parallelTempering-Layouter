@@ -10,7 +10,7 @@ void setupDebugRoom(Room* room){
     float bedParam[] = {0, 0, 200, 100, 0, 4, 10};
     float deskParam[] = {0, 0, 40, 100, 0, 7, 10};
     float fpParam[] = {0, 150, 0};
-    float mWeights[] = {1.0f, 0.01f, 0.01f, 0.1f, 1.0f, 1.0f, 1.0f, 0.001f, 0.01f, 1.0f, 1.0f};
+    float mWeights[] = {1.0f, 0.01f, 0.01f, 0.1f, 1.0f, 1.0f, 1.0f, 0.001f, 0.01f, 1.0f, 2.0f};
 
     room->initialize_room(400.0f, 300.0f);
     room->add_a_wall(vector<float>(wallParam1,wallParam1 + 4));

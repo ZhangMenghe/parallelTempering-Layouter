@@ -6,9 +6,9 @@
 #include "hostUtils.h"
 using namespace std;
 
-#define THREADHOLD_T 0.8
+#define THREADHOLD_T 0.7
 
-const unsigned int nBlocks = 1;
+const unsigned int nBlocks = 10;
 const unsigned int nThreads = 32;//it's werid
 const unsigned int WHICH_GPU = 0;
 
@@ -152,7 +152,7 @@ int randomly_perturb(sharedRoom* room, singleObj * objs, int pickedIdx,
             random_along_wall(room, obj);
         else{
             int randomMethod = (room->objctNum < 2)? 2: 3;
-            switch (2){//
+            switch (get_int_random(randomMethod, index)){
                 // randomly rotate
                 case 0:
                     if (obj->alignedTheWall)
@@ -163,27 +163,34 @@ int randomly_perturb(sharedRoom* room, singleObj * objs, int pickedIdx,
                 case 1:
                     while(set_obj_translation(room, obj,
                                             get_float_random(room->half_width, index),
-                                            get_float_random(room->half_height, index)));
+                                            get_float_random(room->half_height, index),true));
                     break;
                 case 2:
                     singleObj * obj2;
+                    int trytimes = 0;
                     // float tmpx = obj->translation[0], tmpy=obj->translation[1], tmprot = obj->zrotation;
-                    while(1){
+                    while(trytimes++ < 5){
                         obj2 = &objs[get_int_random(room->objctNum, index)];
                         if(obj2->id == pickedIdx || obj2->adjoinWall || obj2->alignedTheWall)
                             continue;
                         storeOrigin(obj2);
+
                         if(!set_obj_translation(room, obj, obj2->translation[0], obj2->translation[1]))
                             continue;
                         if(!set_obj_translation(room, obj2, obj->lastTransAndRot[0], obj->lastTransAndRot[1])){
                             set_obj_translation(room, obj, obj->lastTransAndRot[0], obj->lastTransAndRot[1]);
                             continue;
                         }
-
+                        break;
+                    }
+                    if(trytimes == 5)
+                        while(set_obj_translation(room, obj,
+                                                get_float_random(room->half_width, index),
+                                                get_float_random(room->half_height, index),true));
+                    else{
                         set_obj_zrotation(obj, obj2->zrotation);
                         set_obj_zrotation(obj2, obj->lastTransAndRot[3]);
                         secondChangeId = obj2->id;
-                        break;
                     }
                     break;
                 default:
@@ -241,7 +248,7 @@ void Metropolis_Hastings(float* costList, float* temparature, int*pickedupIds){
             p0 = density_function(temparature[blockIdx.x], cpre);
         }
 
-        pickedId = pickedupIds[blockIdx.x];
+        pickedId = blockIdx.x%room->objctNum;//pickedupIds[blockIdx.x];
 
         // if(blockIdx.x == 0)
             // fprintf( stderr,"threadIdx: %d, nTimes: %d\n", threadIdx.x, nt);
@@ -255,10 +262,10 @@ void Metropolis_Hastings(float* costList, float* temparature, int*pickedupIds){
                         &sWrapper[0].wMask[maskStart], &sWrapper[0].backMask[maskStart], &costList[startId]);
 
         getWeightedCost(room, objsBlock, sWrapper[0].wPairRelation, &sWrapper[0].wmaskArea[2*blockIdx.x], &costList[startId]);
-        // if(threadIdx.x == 0 ){
+        // if(threadIdx.x == 0 && nt%10==0 ){
         //     for(int i=0; i<2; i++)
         //         printf("obj: %d, loc: %f, %f\n",i, objsBlock[i].translation[0], objsBlock[i].translation[1] );
-        //     displayResult(costList);
+        //     displayResult(costList, weights);
         // }
 
         __syncthreads();
@@ -271,14 +278,14 @@ void Metropolis_Hastings(float* costList, float* temparature, int*pickedupIds){
             p1 = density_function(temparature[blockIdx.x], cpost);
             alpha = fminf(1.0f, p1/p0);
             // printf("alpha: %f cpre: %f cpost: %f\n",alpha, cpre, cpost );
-            /*if(alpha < THREADHOLD_T){
+            if(alpha < THREADHOLD_T){
                 restoreOrigin(room, &sWrapper[0].wMask[maskStart],&costList[startId],
                                 &objsBlock[pickedId], nThreads);
                 if(secondChangeId!=-1)
                     restoreOrigin(room, &sWrapper[0].wMask[maskStart],&costList[startId],
                                 &objsBlock[secondChangeId], nThreads);
-            }*/
-            if(cpost < cpre){
+            }
+            else if(cpost < cpre){
                 getTemporalTransAndRot(room, objsBlock, sWrapper[0].resTransAndRot, cpost);
                 cpre = cpost;
             }
@@ -305,7 +312,7 @@ void Do_Metropolis_Hastings(sharedWrapper *gWrapper, float * gArray){
     float* temparature = (float *) & costList[nBlocks * nThreads];
     int * pickedupIds = (int*) &temparature[nBlocks];
 
-	temparature[blockIdx.x] = -get_float_random(10);
+	temparature[blockIdx.x] = get_float_random(10)/100;
     for(int i=threadIdx.x; i<gWrapper->nTimes; i+=nThreads)
         pickedupIds[i] = get_int_random(sWrapper[0].wRoom->objctNum);
 

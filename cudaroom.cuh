@@ -1,9 +1,11 @@
 #include <stdio.h>
 #include "utils.cuh"
 __device__
-bool set_obj_translation(sharedRoom * room, singleObj* obj, float cx, float cy){
-    cx = (get_int_random(2) == 0)?cx:-cx;
-    cy = (get_int_random(2) == 0)?cy:-cy;
+bool set_obj_translation(sharedRoom * room, singleObj* obj, float cx, float cy, bool rand_pn=false){
+    if(rand_pn){
+        cx = (get_int_random(2) == 0)?cx:-cx;cy = (get_int_random(2) == 0)?cy:-cy;
+    }
+
     float halfw = obj->boundingBox.width/2, halfh = obj->boundingBox.height/2;
     if( cx + halfw > room->half_width || cx-halfw < -room->half_width
      || cy + halfh > room->half_height || cy-halfh < -room->half_height)
