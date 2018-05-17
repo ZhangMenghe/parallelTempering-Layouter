@@ -25,11 +25,11 @@ void Room::init_a_wall(wall *newWall, vector<float> params) {
 	newWall->width = sqrtf(powf((by - ay), 2) + powf((bx - ax), 2));
 	copy(params.begin(), params.end(), newWall->vertices);
 	if (ax == bx) {
-		newWall->zrotation = 0;
+		newWall->zrotation =PI/2;
 		newWall->b = 0; newWall->a = 1; newWall->c = -ax;
 	}
 	else if (ay == by) {
-		newWall->zrotation = PI/2;
+		newWall->zrotation = 0;
 		newWall->a = 0; newWall->b = 1; newWall->c = -ay;
 	}
 	else {
@@ -232,21 +232,6 @@ void Room::set_obj_zrotation(singleObj * obj, float nrot) {
 	obj->boundingBox.width = maxx-minx; obj->boundingBox.height = maxy-miny;
 }
 
-__device__
-float Room::get_nearest_wall_dist(singleObj * obj) {
-	float x = obj->translation[0], y = obj->translation[1];
-	float min_dist = INFINITY, dist;
-
-	for (int i = 0; i < wallNum; i++) {
-		dist = fabsf(deviceWalls[i].a * x + deviceWalls[i].b * y + deviceWalls[i].c) / sqrtf(deviceWalls[i].a * deviceWalls[i].a + deviceWalls[i].b * deviceWalls[i].b);
-		if (dist < min_dist) {
-			min_dist = dist;
-			obj->nearestWall = i;
-		}
-	}
-	// printf("%d : %f\n", obj->nearestWall, min_dist);
-	return min_dist;
-}
 void Room::update_mask_by_object(const singleObj* obj, unsigned char * target, float movex, float movey){
 }
 

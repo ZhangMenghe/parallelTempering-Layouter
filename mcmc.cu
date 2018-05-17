@@ -8,7 +8,7 @@ using namespace std;
 
 #define THREADHOLD_T 0.7
 
-const unsigned int nBlocks = 10;
+const unsigned int nBlocks = 1;
 const unsigned int nThreads = 32;//it's werid
 const unsigned int WHICH_GPU = 0;
 
@@ -58,9 +58,15 @@ void changeTemparature(float * temparature){
 __device__
 void random_along_wall(sharedRoom * room, singleObj * obj){
     wall * swall = &room->deviceWalls[get_int_random(room->wallNum)];
-    float mwidth = (get_int_random(2)==0)?obj->objWidth:obj->objHeight;
-    float mheight = (mwidth == obj->objWidth)? obj->objHeight: obj->objWidth;
-    set_obj_zrotation(obj, swall->zrotation);
+    float mwidth, mheight;
+    if(get_int_random(2)==0){
+        mwidth = obj->objWidth; mheight = obj->objHeight;
+        set_obj_zrotation(obj, swall->zrotation);
+    }else{
+        mwidth = obj->objHeight; mheight = obj->objWidth;
+        set_obj_zrotation(obj, PI/2-swall->zrotation);
+    }
+
     float width_ran = swall->width - mwidth, height_ran =swall->width-mheight;
     float rh, rw;
     int mp = (swall->translation[0] >0 || swall->translation[1]>0)? -1:1;
@@ -151,7 +157,7 @@ int randomly_perturb(sharedRoom* room, singleObj * objs, int pickedIdx,
         if (obj->adjoinWall)
             random_along_wall(room, obj);
         else{
-            int randomMethod = (room->objctNum < 2)? 2: 3;
+            int randomMethod = (room->objctNum < 2 || obj->alignedTheWall)? 2: 3;
             switch (get_int_random(randomMethod, index)){
                 // randomly rotate
                 case 0:
@@ -183,7 +189,7 @@ int randomly_perturb(sharedRoom* room, singleObj * objs, int pickedIdx,
                         }
                         break;
                     }
-                    if(trytimes == 5)
+                    if(trytimes >= 5)
                         while(set_obj_translation(room, obj,
                                                 get_float_random(room->half_width, index),
                                                 get_float_random(room->half_height, index),true));
@@ -248,15 +254,19 @@ void Metropolis_Hastings(float* costList, float* temparature, int*pickedupIds){
             p0 = density_function(temparature[blockIdx.x], cpre);
         }
 
-        pickedId = blockIdx.x%room->objctNum;//pickedupIds[blockIdx.x];
+        pickedId = pickedupIds[blockIdx.x];
 
-        // if(blockIdx.x == 0)
+        // if(threadIdx.x ==0)
+            // printf("block: %d pickup: %d\n",blockIdx.x, pickedId );
             // fprintf( stderr,"threadIdx: %d, nTimes: %d\n", threadIdx.x, nt);
             //printf("threadIdx: %d, nTimes: %d\n", threadIdx.x, nt);
         __syncthreads();
 
-        if(threadIdx.x == 0)
+        if(threadIdx.x == 0){
             pickedupIds[blockIdx.x] = get_int_random(room->objctNum);
+            // printf("block: %d pickup: %d\n",blockIdx.x, pickedId );
+        }
+
 
         secondChangeId = randomly_perturb(room, objsBlock, pickedId,
                         &sWrapper[0].wMask[maskStart], &sWrapper[0].backMask[maskStart], &costList[startId]);
