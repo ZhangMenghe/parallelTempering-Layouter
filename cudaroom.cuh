@@ -91,7 +91,7 @@ void change_an_obj_mask(sharedRoom * room, singleObj * obj, unsigned char* mask,
 }
 __device__
 void sumUpMask(sharedRoom * room, unsigned char* mask, float * tmpSlot, float*dest, int nThreads){
-    tmpSlot[threadIdx.x] = 0;
+    tmpSlot[threadIdx.x] = 0;*dest = 0;
     get_sum_furnitureMsk(mask, room->colCount, room->rowCount, &tmpSlot[threadIdx.x], threadIdx.x, nThreads);
 
     __syncthreads();

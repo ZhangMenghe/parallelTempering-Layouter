@@ -41,9 +41,8 @@ void get_obj_reflection(singleObj * obj, const float* focal){
 //Clearance :
 //Mcv(I) that minimize the overlap between furniture(with space)
 __device__
-void cal_clearance_violation(sharedRoom * room, float& mcv){
-    mcv = room->indepenFurArea - room->maskArea;
-    //printf("%f - %f\n", room->indepenFurArea, room->maskArea);
+void cal_clearance_violation(sharedRoom * room, float maskArea, float& mcv){
+    mcv = room->indepenFurArea - maskArea;
     mcv = (mcv < 0)? 0 : mcv;
 }
 //Circulation:
@@ -171,7 +170,7 @@ void displayResult(float * costList){
 }
 
 __device__
-void getWeightedCost(sharedRoom * room, singleObj* objs, int* pairRelations, float* costList){
+void getWeightedCost(sharedRoom * room, singleObj* objs, int* pairRelations, float* maskArea, float* costList){
     costList[threadIdx.x] = 0;
     if(threadIdx.x < room->objctNum){
 
@@ -204,9 +203,9 @@ void getWeightedCost(sharedRoom * room, singleObj* objs, int* pairRelations, flo
         }
     }
     else if(threadIdx.x == room->objctNum){
-        cal_circulation_term(room->maskArea, room->maskAreaPerson, costList[10]);
+        cal_circulation_term(maskArea[0], maskArea[1], costList[10]);
         //printf("circulation: %f\n",costList[10]);
-        cal_clearance_violation(room, costList[11]);
-        //printf("clearance: %f\n", costList[11]);
+        cal_clearance_violation(room, maskArea[0], costList[11]);
+        // printf("clearance: %f\n", costList[11]);
     }
 }

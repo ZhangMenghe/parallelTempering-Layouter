@@ -33,7 +33,7 @@ __device__
 float sumUp_weighted_dataInShare(float* data, float* weights, int bound){
     float res = 0;
     for(int i=0; i<bound; i++)
-        res += data[i]* weights[i];
+        res += fabsf(data[i])* weights[i];
     return res;
 }
 __device__
