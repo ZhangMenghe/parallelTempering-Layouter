@@ -51,6 +51,7 @@ void update_mask_by_object(unsigned char* mask, float* tmpSlot, float * vertices
                             mRect2f boundingBox, int halfRowNum, int colNum, int absThreadIdx, int threadStride, int addition=1){
 
     int boundX = boundingBox.x + boundingBox.width;
+    int tmpPos;
     //Ideally, each thread process a row
     for(int y = boundingBox.y - absThreadIdx; y > boundingBox.y - boundingBox.height; y -= threadStride){
         //int test = 0;
@@ -59,7 +60,11 @@ void update_mask_by_object(unsigned char* mask, float* tmpSlot, float * vertices
             else{
                 int endIndx = binary_search_Inside_Point(x, boundX - 1, 0, y, tmpSlot, vertices);
                 while(x <= endIndx){
-                    mask[(halfRowNum - y) *colNum  + x] += addition;
+                    tmpPos = (halfRowNum - y) *colNum  + x;
+                    if(addition == 1)
+                        mask[tmpPos] = 1;
+                    else
+                        mask[tmpPos] = 0;
                     x++;
                     //test += mask[(halfRowNum - y) *colNum  + x];
                 }

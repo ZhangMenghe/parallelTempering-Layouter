@@ -6,7 +6,9 @@ __device__ __managed__ float weights[11]={1.0f};
 void setupDebugRoom(Room* room){
     float wallParam1[] = {-200, 150, 200, 150};
     float wallParam2[] = {-200, -150, 200, -150};
-    float objParam[] = {-50, 0, 50, 50, 0, 0, 10};
+    float wallParam3[] = {-200, -150, -200, 150};
+    float wallParam4[] = {200, -150, 200, 150};
+    float objParam[] = {0, 0, 50, 50, 0, 0, 10};
     float bedParam[] = {0, 0, 100, 200, 0, 4, 10};
     float deskParam[] = {0, 0, 40, 100, 0, 7, 10};
     float fpParam[] = {0, 150, 0};
@@ -15,10 +17,12 @@ void setupDebugRoom(Room* room){
     room->initialize_room(400.0f, 300.0f);
     room->add_a_wall(vector<float>(wallParam1,wallParam1 + 4));
     room->add_a_wall(vector<float>(wallParam2,wallParam2 + 4));
+    room->add_a_wall(vector<float>(wallParam3,wallParam3 + 4));
+    room->add_a_wall(vector<float>(wallParam4,wallParam4 + 4));
     room->add_an_object(vector<float>(objParam,objParam + 7));
-    // room->add_an_object(vector<float>(objParam,objParam + 7));
+    room->add_an_object(vector<float>(objParam,objParam + 7));
     room->add_an_object(vector<float>(bedParam,bedParam + 7));
-    // room->add_an_object(vector<float>(deskParam,deskParam + 7));
+    room->add_an_object(vector<float>(deskParam,deskParam + 7));
     room->add_a_focal_point(vector<float>(fpParam,fpParam + 3));
     room->objects[1].adjoinWall = true;
     for(int i=0;i<11;i++)

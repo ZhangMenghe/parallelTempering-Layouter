@@ -8,7 +8,7 @@ using namespace std;
 
 #define THREADHOLD_T 0.7
 
-const unsigned int nBlocks = 1;
+const unsigned int nBlocks = 10;
 const unsigned int nThreads = 32;//it's werid
 const unsigned int WHICH_GPU = 0;
 
@@ -120,6 +120,15 @@ void initial_assignment(sharedRoom* room, singleObj * objs,
     // if(threadIdx.x ==0){
     //     printf("sum of mask inital: %f\n", sWrapper[0].wmaskArea[2*blockIdx.x]);
     // }
+    // storeOrigin(&objs[0]);
+    // change_an_obj_mask(room, &objs[0], mask, tmpSlot, threadIdx.x, nThreads);
+    // __syncthreads();
+    //
+    // sumUpMask(room, mask, tmpSlot, &sWrapper[0].wmaskArea[2*blockIdx.x], nThreads);
+    //
+    // if(threadIdx.x ==0){
+    //     printf("sum of mask inital - test: %f\n", sWrapper[0].wmaskArea[2*blockIdx.x]);
+    // }
 }
 
 __device__
@@ -158,7 +167,7 @@ int randomly_perturb(sharedRoom* room, singleObj * objs, int pickedIdx,
             random_along_wall(room, obj);
         else{
             int randomMethod = (room->objctNum < 2 || obj->alignedTheWall)? 2: 3;
-            switch (get_int_random(randomMethod, index)){
+            switch (get_int_random(2, index)){
                 // randomly rotate
                 case 0:
                     if (obj->alignedTheWall)
@@ -204,20 +213,32 @@ int randomly_perturb(sharedRoom* room, singleObj * objs, int pickedIdx,
                 }//end switch
         }// end not adjoint wall
     }//end thread == 0
-    else{
-        change_an_obj_mask(room, obj, mask, tmpSlot, threadIdx.x-1, nThreads-1);
-        change_an_obj_backupMask(room, obj, backupMask, nThreads);
-        if(secondChangeId!=-1){
-            change_an_obj_mask(room, &objs[secondChangeId], mask, tmpSlot, threadIdx.x-1, nThreads-1);
-            change_an_obj_backupMask(room, &objs[secondChangeId], backupMask, nThreads);
-        }
-    }
 
+        // change_an_obj_mask(room, obj, mask, tmpSlot, threadIdx.x, nThreads);
+        // change_an_obj_backupMask(room, obj, backupMask, nThreads);
+        // if(secondChangeId!=-1){
+        //     change_an_obj_mask(room, &objs[secondChangeId], mask, tmpSlot, threadIdx.x, nThreads);
+        //     change_an_obj_backupMask(room, &objs[secondChangeId], backupMask, nThreads);
+        // }
+
+    memset(mask, 0, room->mskCount * sizeof(unsigned char));
+    // __syncthreads();
+    // sWrapper[0].wmaskArea[2*blockIdx.x] = 0;
+    // sumUpMask(room, mask, tmpSlot, &sWrapper[0].wmaskArea[2*blockIdx.x], nThreads);
+    // sumUpMask(room, backupMask, tmpSlot, &sWrapper[0].wmaskArea[2*blockIdx.x+1], nThreads);
+    for (int i = 0; i < room->objctNum; i++) {
+        update_mask_by_object(mask, tmpSlot, objs[i].vertices, objs[i].boundingBox,
+                              room->rowCount/2, room->colCount,
+                              threadIdx.x, nThreads, 1);
+
+        mRect2f rect = get_circulate_boundingbox(room, &objs[i].boundingBox);
+
+        update_mask_by_boundingBox(backupMask, rect, room->rowCount/2, room->colCount, threadIdx.x, nThreads, -1);
+    }
     __syncthreads();
 
     sumUpMask(room, mask, tmpSlot, &sWrapper[0].wmaskArea[2*blockIdx.x], nThreads);
     sumUpMask(room, backupMask, tmpSlot, &sWrapper[0].wmaskArea[2*blockIdx.x+1], nThreads);
-
     // if(threadIdx.x ==0){
     //     printf("loc and pos: %f, %f, %f\n",obj->translation[0], obj->translation[1], obj->zrotation );
     //     printf("sum of mask: %f\n", sWrapper[0].wmaskArea[2*blockIdx.x]);
@@ -246,7 +267,8 @@ void Metropolis_Hastings(float* costList, float* temparature, int*pickedupIds){
 
     float cpre = sumUp_weighted_dataInShare(&costList[startId+1], weights, WEIGHT_NUM);
     getTemporalTransAndRot(room, objsBlock, sWrapper[0].resTransAndRot, cpre);
-
+    // if(threadIdx.x == 0)
+    //     displayResult(costList, weights);
     for(int nt = 0; nt<sWrapper[0].nTimes; nt++){
         if(threadIdx.x == 0){
             if(nBlocks>1 && nt % 10 == 0)
@@ -275,7 +297,7 @@ void Metropolis_Hastings(float* costList, float* temparature, int*pickedupIds){
         // if(threadIdx.x == 0 && nt%10==0 ){
         //     for(int i=0; i<2; i++)
         //         printf("obj: %d, loc: %f, %f\n",i, objsBlock[i].translation[0], objsBlock[i].translation[1] );
-        //     displayResult(costList, weights);
+            // displayResult(costList, weights);
         // }
 
         __syncthreads();
