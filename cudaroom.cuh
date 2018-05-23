@@ -38,14 +38,72 @@ void set_obj_zrotation(singleObj * obj, float nrot) {
 	obj->boundingBox.x = minx; obj->boundingBox.y=maxy;
 	obj->boundingBox.width = maxx-minx; obj->boundingBox.height = maxy-miny;
 }
+__device__
+void get_sum_furnitureMsk(unsigned char* mask, int colCount, int rowCount, float * res, int absThreadIdx, int threadStride){
+    for(int row = absThreadIdx; row<rowCount; row+=threadStride){
+        for(int col =0; col<colCount; col++){
+            if(mask[row*colCount + col] > 0)
+                *res+=1;
+        }
+    }
+    //printf("%d - %f\n", threadIdx.x, *res);
+}
+
+__device__
+void sumUpMask(sharedRoom * room, unsigned char* mask, float * tmpSlot, float*dest, int nThreads){
+    tmpSlot[threadIdx.x] = 0;*dest = 0;
+    get_sum_furnitureMsk(mask, room->colCount, room->rowCount, &tmpSlot[threadIdx.x], threadIdx.x, nThreads);
+
+    __syncthreads();
+
+    sumUp_dataInShare(tmpSlot, dest, nThreads);
+}
 //update_mask_by_boundingBox(backupMask, rect, room->rowCount/2, room->colCount, threadIdx.x, nThreads, 1);
 __device__
-void update_mask_by_boundingBox(unsigned char* mask, mRect2f boundingBox, int halfRowNum, int colNum, int absThreadIdx, int threadStride, int addition=1){
+void update_mask_by_boundingBox(unsigned char* mask, mRect2f boundingBox, int halfRowNum, int colNum, int absThreadIdx, int threadStride, int addition = 1){
     for(int y = boundingBox.y - absThreadIdx; y > boundingBox.y - boundingBox.height; y -= threadStride){
         for(int x=boundingBox.x; x<boundingBox.x + boundingBox.width; x++)
-            mask[(halfRowNum - y) *colNum  + x] += addition;
+            mask[(halfRowNum - y) *colNum  + x] = 1;
     }
 }
+__device__
+void draw_objMask_patch(sharedRoom * room, singleObj * obj, float* tmpSlot, int absThreadIdx, int threadStride){
+    mRect2f * bbox = &obj->boundingBox;
+    memset(obj->objMask, 0, obj->maskLen*obj->maskLen * sizeof(unsigned char));
+    int boundX = bbox->x + bbox->width;
+    int pos;
+    for(int y=bbox->y - absThreadIdx; y>bbox->y - bbox->height; y-= threadStride){
+        for(int x = bbox->x; x<boundX; x++){
+            if(point_in_rectangle(tmpSlot, obj->vertices, x, y)){
+                pos = (bbox->y - y) * obj->maskLen + (x - bbox->x);
+                obj->objMask[pos] = 1;
+            }
+
+            // if(!point_in_rectangle(tmpSlot, obj->vertices, x, y));
+            // else{
+            //     int endIndx = binary_search_Inside_Point(x, boundX - 1, 0, y, tmpSlot, obj->vertices);
+            //     while(x <= endIndx){
+            //         pos = (bbox->y - y) * obj->maskLen + (x - bbox->x);
+            //         // obj->objMask[pos] = 1;
+            //     }
+            //
+            // }
+        }
+    }
+    sumUpMask(room, obj->objMask, tmpSlot, &obj->area, threadStride);
+}
+__device__
+void draw_patch_on_union_mask(unsigned char * mask, singleObj * obj, int halfRowNum, int colNum,
+                                int absThreadIdx, int threadStride){
+    int basey = halfRowNum - obj->boundingBox.y;
+    int pos;
+    for(int y=absThreadIdx; y<obj->boundingBox.height;y+=threadStride)
+        for(int x=0; x<obj->boundingBox.width; x++){
+            pos = (basey + y)* colNum + obj->boundingBox.x + x;
+            mask[pos] = obj->objMask[y*obj->maskLen + x];
+        }
+}
+
 __device__
 void update_mask_by_object(unsigned char* mask, float* tmpSlot, float * vertices,
                             mRect2f boundingBox, int halfRowNum, int colNum, int absThreadIdx, int threadStride, int addition=1){
@@ -76,16 +134,7 @@ void update_mask_by_object(unsigned char* mask, float* tmpSlot, float * vertices
     }
 }
 
-__device__
-void get_sum_furnitureMsk(unsigned char* mask, int colCount, int rowCount, float * res, int absThreadIdx, int threadStride){
-    for(int row = absThreadIdx; row<rowCount; row+=threadStride){
-        for(int col =0; col<colCount; col++){
-            if(mask[row*colCount + col] > 0)
-                *res+=1;
-        }
-    }
-    //printf("%d - %f\n", threadIdx.x, *res);
-}
+
 __device__
 void change_an_obj_mask(sharedRoom * room, singleObj * obj, unsigned char* mask,
                         float* tmpSlot, int absThreadIdx, int threadStride){
@@ -96,22 +145,18 @@ void change_an_obj_mask(sharedRoom * room, singleObj * obj, unsigned char* mask,
                         room->rowCount/2, room->colCount,
                         absThreadIdx, threadStride, 1);
 }
-__device__
-void sumUpMask(sharedRoom * room, unsigned char* mask, float * tmpSlot, float*dest, int nThreads){
-    tmpSlot[threadIdx.x] = 0;*dest = 0;
-    get_sum_furnitureMsk(mask, room->colCount, room->rowCount, &tmpSlot[threadIdx.x], threadIdx.x, nThreads);
 
-    __syncthreads();
-
-    sumUp_dataInShare(tmpSlot, dest, nThreads);
-}
 __device__
 mRect2f get_circulate_boundingbox(sharedRoom * room, mRect2f* rect){
      mRect2f nrect;
-     nrect.x = ((rect->x-PERSONSIZE)< -room->half_width)? -room->half_width:rect->x-PERSONSIZE;
-     nrect.y = ((rect->y + PERSONSIZE)> room->half_height)?  room->half_height:rect->y + PERSONSIZE;
-     nrect.width = rect->width+2*PERSONSIZE;
-     nrect.height = rect->height + 2* PERSONSIZE;
+     float newx = ((rect->x-PERSONSIZE)< -room->half_width)? -room->half_width+1:rect->x-PERSONSIZE;
+     float newy = ((rect->y + PERSONSIZE)> room->half_height)?  room->half_height-1:rect->y + PERSONSIZE;
+
+     nrect.width = rect->width+PERSONSIZE+(rect->x - newx);
+     nrect.height = rect->height + PERSONSIZE + (newy - rect->y);
+     nrect.width = ((nrect.width + newx) > room->half_width)? (room->half_width-newx-1):nrect.width;
+     nrect.height = ((newy - nrect.height) < -room->half_height)?(newy +room->half_height-1):nrect.height;
+     nrect.x = newx; nrect.y = newy;
      return nrect;
 }
 __device__

@@ -41,6 +41,9 @@ struct singleObj{
 	float refRot;
 	float refPos[2];
 
+	unsigned char * objMask;
+	int maskLen;
+
 	float lastVertices[8];
 	mRect2f lastBoundingBox;
 	float lastTransAndRot[4];

@@ -60,7 +60,11 @@ void Room::init_an_object(vector<float>params, bool isFixed, bool isPrevious) {
 	// if (!isPrevious)//existing objs' values should be
 		// update_obj_boundingBox_and_vertices(obj, 0);
 
+	//move this calculation to device
 	indepenFurArea += obj.objWidth * obj.objHeight; //get_single_obj_maskArea(obj.vertices);
+
+	obj.maskLen = int(sqrtf(obj.objWidth * obj.objWidth + obj.objHeight * obj.objHeight));
+
 	int gidx = 0;
 	for(; gidx<groupNum; gidx++){
 		if(groupMap[gidx].gid == params[15]){
