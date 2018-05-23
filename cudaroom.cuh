@@ -73,21 +73,16 @@ void draw_objMask_patch(sharedRoom * room, singleObj * obj, float* tmpSlot, int 
     int boundX = bbox->x + bbox->width;
     int pos;
     for(int y=bbox->y - absThreadIdx; y>bbox->y - bbox->height; y-= threadStride){
-        for(int x = bbox->x; x<boundX; x++){
-            if(point_in_rectangle(tmpSlot, obj->vertices, x, y)){
-                pos = (bbox->y - y) * obj->maskLen + (x - bbox->x);
-                obj->objMask[pos] = 1;
+        for(int x = bbox->x; x<boundX; ){
+            if(!point_in_rectangle(tmpSlot, obj->vertices, x, y))
+                x++;
+            else{
+                int endIndx = binary_search_Inside_Point(x, boundX - 1, 0, y, tmpSlot, obj->vertices);
+                for(;x<=endIndx;x++){
+                    pos = (bbox->y - y) * obj->maskLen + (x - bbox->x);
+                    obj->objMask[pos] = 1;
+                }
             }
-
-            // if(!point_in_rectangle(tmpSlot, obj->vertices, x, y));
-            // else{
-            //     int endIndx = binary_search_Inside_Point(x, boundX - 1, 0, y, tmpSlot, obj->vertices);
-            //     while(x <= endIndx){
-            //         pos = (bbox->y - y) * obj->maskLen + (x - bbox->x);
-            //         // obj->objMask[pos] = 1;
-            //     }
-            //
-            // }
         }
     }
     sumUpMask(room, obj->objMask, tmpSlot, &obj->area, threadStride);

@@ -207,18 +207,18 @@ int randomly_perturb(sharedRoom* room, singleObj * objs, int pickedIdx,
     }//end thread == 0
 
     draw_objMask_patch(room, obj, tmpSlot, threadIdx.x, nThreads);
-     if(secondChangeId!=-1)
-        draw_objMask_patch(room, &objs[secondChangeId], tmpSlot, threadIdx.x, nThreads);
+    change_an_obj_backupMask(room, obj, backupMask, nThreads);
+     if(secondChangeId!=-1){
+         draw_objMask_patch(room, &objs[secondChangeId], tmpSlot, threadIdx.x, nThreads);
+         change_an_obj_backupMask(room,  &objs[secondChangeId], backupMask, nThreads);
+     }
+
 
     memset(mask, 0, room->mskCount * sizeof(unsigned char));
-    memset(backupMask, 0, room->mskCount * sizeof(unsigned char));
 
-    __syncthreads();
-    for (int i = 0; i < room->objctNum; i++) {
+    for (int i = 0; i < room->objctNum; i++)
         draw_patch_on_union_mask(mask, &objs[i], room->rowCount/2, room->colCount, threadIdx.x, nThreads);
-        mRect2f rect = get_circulate_boundingbox(room, &objs[i].boundingBox);
-        update_mask_by_boundingBox(backupMask, rect, room->rowCount/2, room->colCount, threadIdx.x, nThreads);
-    }
+
     __syncthreads();
 
     sumUpMask(room, mask, tmpSlot, &sWrapper[0].wmaskArea[2*blockIdx.x], nThreads);
