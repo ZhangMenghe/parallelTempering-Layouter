@@ -335,6 +335,33 @@ void Initialize_Room_In_Device(sharedRoom* room, singleObj* objs, unsigned char*
         draw_objMask_patch(room, &objs[room->freeObjIds[i]], tmpSlot, threadIdx.x, nThreads);
         draw_patch_on_union_mask(initialMask, &objs[room->freeObjIds[i]], room->rowCount/2, room->colCount, threadIdx.x, nThreads);
     }
+    //tackle with oblique wall
+    /*for(int i=0; i<room->wallNum; i++){
+        wall* cwall = &room->deviceWalls[i];
+        if(fabs(fmod(cwall->zrotation, 90)) > 0.01){
+            printf("wall: %d\n", cwall->id);
+            float ax, ay, bx, by;
+            if(fabs(wall->vertices[0]) > fabs(cwall->vertices[2])){
+                ax = cwall->vertices[0]; ay = cwall->vertices[1];
+                bx = cwall->vertices[2]; by = cwall->vertices[3];
+            }else{
+                bx = cwall->vertices[0]; by = cwall->vertices[1];
+                ax = cwall->vertices[2]; ay = cwall->vertices[3];
+            }
+            if(ax < 0){
+                if(ay<by){
+                    float k=-cwall->b/cwall->a; float b=-cwall->c/cwall->a;
+                    for(int y=ay; y<by; y++){
+                        for(int x=ax; x<k*y+b; x++){
+
+                        }
+                    }
+                }
+
+            }
+
+        }
+    }*/
 }
 __global__
 void Do_Metropolis_Hastings(sharedWrapper *gWrapper, float * gArray){
@@ -404,12 +431,13 @@ void generate_suggestions(Room * m_room, int nTimes){
     int tMem = gWrapper->wRoom->mskCount * sizeof(unsigned char);
 
     cudaMallocManaged(&gWrapper->initialMask, tMem);
-    cudaMemset(gWrapper->backMask, 0, nBlocks*tMem);
+    cudaMemset(gWrapper->initialMask, 0, tMem);
 
     cudaMallocManaged(&gWrapper->wMask, nBlocks *tMem);
 
     cudaMallocManaged(&gWrapper->backMask, nBlocks *tMem);
     cudaMemset(gWrapper->backMask, 0, nBlocks*tMem);
+
     if(m_room->obstacles.size()!=0){
         int obstacleVerticesMem = sizeof(float) * 8 * m_room->obstacles.size();
         cudaMallocManaged(&gWrapper->obstacleVertices, obstacleVerticesMem);
@@ -434,8 +462,8 @@ void generate_suggestions(Room * m_room, int nTimes){
 
     float * gArray;
     cudaMallocManaged(&gArray, nThreads * sizeof(float));
-    cudaError_t err = cudaGetLastError();
-    cout<<"error:"<<err<<endl;
+    const char * errStr1 = cudaGetErrorString (cudaGetLastError());
+    cout<<"error:"<<errStr1<<endl;
 	Do_Metropolis_Hastings<<<nBlocks, nThreads, sizeof(*gWrapper)>>>(gWrapper, gArray);
 	cudaDeviceSynchronize();
     const char * errStr = cudaGetErrorString (cudaGetLastError());
