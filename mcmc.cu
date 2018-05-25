@@ -111,9 +111,10 @@ void initial_assignment(sharedRoom* room, singleObj * objs,
     for (int i = 0; i < room->objctNum; i++) {
         mRect2f rect = get_circulate_boundingbox(room, &objs[i].boundingBox);
         update_mask_by_boundingBox(backupMask, rect, room->rowCount/2, room->colCount, threadIdx.x, nThreads);
-
-        draw_objMask_patch(room, &objs[i], tmpSlot, threadIdx.x, nThreads);
-        draw_patch_on_union_mask(mask, &objs[i], room->rowCount/2, room->colCount, threadIdx.x, nThreads);
+        if(!objs[i].isFixed){
+            draw_objMask_patch(room, &objs[i], tmpSlot, threadIdx.x, nThreads);
+            draw_patch_on_union_mask(mask, &objs[i], room->rowCount/2, room->colCount, threadIdx.x, nThreads);
+        }
     }
 
 
@@ -219,8 +220,8 @@ int randomly_perturb(sharedRoom* room, singleObj * objs, int pickedIdx,
 
     // memset(mask, 0, room->mskCount * sizeof(unsigned char));
     memcpy(mask, initialMask,room->mskCount*sizeof(unsigned char) );
-    for (int i = 0; i < room->objctNum; i++)
-        draw_patch_on_union_mask(mask, &objs[i], room->rowCount/2, room->colCount, threadIdx.x, nThreads);
+    for (int i = 0; i < room->freeObjNum; i++)
+        draw_patch_on_union_mask(mask, &objs[room->freeObjIds[i]], room->rowCount/2, room->colCount, threadIdx.x, nThreads);
 
     __syncthreads();
 
@@ -311,7 +312,7 @@ void Metropolis_Hastings(float* costList, float* temparature, int*pickedupIds){
     }//end for
 }
 __device__
-void Initialize_Room_In_Device(sharedRoom* room, unsigned char* initialMask,float*obsVertices,float*tmpSlot){
+void Initialize_Room_In_Device(sharedRoom* room, singleObj* objs, unsigned char* initialMask,float*obsVertices,float*tmpSlot){
     for(int k=0; k<room->obstacleNum; k++){
         float minx= obsVertices[0],maxx = obsVertices[0], miny=obsVertices[1],maxy = obsVertices[1];
         for(int i=1; i<4; i++){
@@ -327,14 +328,19 @@ void Initialize_Room_In_Device(sharedRoom* room, unsigned char* initialMask,floa
                               threadIdx.x, nThreads);
     }
     __syncthreads();
-
     sumUpMask(room, initialMask, tmpSlot, &room->obstacleArea, nThreads);
+    __syncthreads();
+
+    for(int i=0; i<room->freeObjNum; i++){
+        draw_objMask_patch(room, &objs[room->freeObjIds[i]], tmpSlot, threadIdx.x, nThreads);
+        draw_patch_on_union_mask(initialMask, &objs[room->freeObjIds[i]], room->rowCount/2, room->colCount, threadIdx.x, nThreads);
+    }
 }
 __global__
 void Do_Metropolis_Hastings(sharedWrapper *gWrapper, float * gArray){
     sWrapper[0] = *gWrapper;
-    if(blockIdx.x ==0 ){
-        Initialize_Room_In_Device(sWrapper[0].wRoom,sWrapper[0].initialMask,sWrapper[0].obstacleVertices,sWrapper[0].wFloats);
+    if(blockIdx.x == 0 ){
+        Initialize_Room_In_Device(sWrapper[0].wRoom, sWrapper[0].wObjs, sWrapper[0].initialMask,sWrapper[0].obstacleVertices,sWrapper[0].wFloats);
     }
     else{
         if(threadIdx.x < sWrapper[0].wRoom->objctNum){
