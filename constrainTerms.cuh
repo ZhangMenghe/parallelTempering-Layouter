@@ -42,8 +42,9 @@ void get_obj_reflection(singleObj * obj, const float* focal){
 //Mcv(I) that minimize the overlap between furniture(with space)
 __device__
 void cal_clearance_violation(sharedRoom * room, float maskArea, float& mcv){
-    mcv = room->indepenFurArea - maskArea;
+    mcv = room->indepenFurArea - (maskArea-room->obstacleArea);
     mcv = (mcv < 0)? 0 : mcv;
+	// printf("in clearance: %f\n",room->obstacleArea );
 }
 //Circulation:
 //Mci support circulation through the room and access to all of the furniture.

@@ -11,6 +11,7 @@ void setupDebugRoom(Room* room){
     float objParam[] = {0, 0, 50, 50, 0, 0, 10};
     float bedParam[] = {0, 0, 100, 200, 0, 4, 10};
     float deskParam[] = {0, 0, 40, 100, 0, 7, 10};
+    float obsParam[] = {-50,50,50,50,50,-50,-50,-50};
     float fpParam[] = {0, 150, 0};
     float mWeights[] = {1.0f, 0.01f, 0.01f, 0.1f, 1.0f, 1.0f, 1.0f, 0.001f, 0.01f, 1.0f, 2.0f};
 
@@ -24,6 +25,7 @@ void setupDebugRoom(Room* room){
     room->add_an_object(vector<float>(bedParam,bedParam + 7));
     room->add_an_object(vector<float>(deskParam,deskParam + 7));
     room->add_a_focal_point(vector<float>(fpParam,fpParam + 3));
+    room->add_an_obstacle(vector<float>(obsParam,obsParam + 8));
     room->objects[1].adjoinWall = true;
     for(int i=0;i<11;i++)
         weights[i] = mWeights[i];

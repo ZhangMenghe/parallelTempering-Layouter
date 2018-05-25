@@ -59,7 +59,7 @@ struct wall{
 	float vertices[4];
 };
 struct sharedRoom{
-	int objctNum, wallNum, freeObjNum;
+	int objctNum, wallNum, obstacleNum;
 	float half_width, half_height;
 	float indepenFurArea, obstacleArea, wallArea;
 	float overlappingThreshold;
@@ -69,14 +69,11 @@ struct sharedRoom{
 	groupMapStruct groupMap[MAX_GROUP_ALLOW];
 	pairMapStruct pairMap[CONSTRAIN_PAIRS];
 	wall deviceWalls[MAX_NUM_WALLS];
-	int freeObjIds[MAX_NUM_OBJS];
 };
 class Room{
 private:
 	unsigned char * furnitureMask_initial;
-	// Point card_to_graph_point(float x, float y) {
-	// 	return Point(int(half_width + x), int(half_height - y));
-	// }
+
     //ax,ay,bx,by
 	void init_a_wall(wall *newWall, vector<float> params);
     void init_an_object(vector<float>params, bool isFixed = false, bool isPrevious = false);
@@ -96,7 +93,6 @@ public:
 	int objctNum;
 	int wallNum;
 	int freeObjNum;
-	unsigned char * furnitureMask;
 	float half_width;
 	float half_height;
 	int rowCount; int colCount;
@@ -124,8 +120,8 @@ public:
     void add_a_focal_point(vector<float> fp);
 	void set_obj_zrotation(singleObj * obj, float new_rotation);
  	bool set_obj_translation(singleObj* obj, float tx, float ty);
-	void update_mask_by_object(const singleObj* obj, unsigned char * target, float movex = -1, float movey=-1);
-    void update_furniture_mask();
+    void add_an_obstacle(vector<float> params);
+	void get_obstacle_vertices(float * vertices);
 	void CopyToSharedRoom(sharedRoom *m_room);
 };
 #endif

@@ -122,7 +122,7 @@ void Room::update_mask_by_wall(const wall* wal) {
 void Room::CopyToSharedRoom(sharedRoom *m_room){
 	m_room->objctNum = objctNum;
 	m_room->wallNum = wallNum;
-	m_room->freeObjNum = freeObjNum;
+	m_room->obstacleNum = obstacles.size();
 	m_room->half_width = half_width;
 	m_room->half_height = half_height;
 	m_room->indepenFurArea = indepenFurArea;
@@ -135,7 +135,7 @@ void Room::CopyToSharedRoom(sharedRoom *m_room){
 	m_room->pairNum = actualPairs.size();
 	m_room->groupNum = groupNum;
 	m_room->RoomCenter[0] = center[0];m_room->RoomCenter[1] = center[1];m_room->RoomCenter[2] = center[2];
-	cudaMemcpy(m_room->freeObjIds, freeObjIds, freeObjNum* sizeof(int), cudaMemcpyHostToDevice);
+	// cudaMemcpy(m_room->freeObjIds, freeObjIds, freeObjNum* sizeof(int), cudaMemcpyHostToDevice);
 	cudaMemcpy(m_room->groupMap, groupMap, MAX_GROUP_ALLOW* sizeof(groupMapStruct), cudaMemcpyHostToDevice);
 	cudaMemcpy(m_room->pairMap, pairMap, CONSTRAIN_PAIRS* sizeof(pairMapStruct), cudaMemcpyHostToDevice);
 	for(int i=0;i<wallNum;i++)
@@ -161,9 +161,6 @@ void Room::initialize_room(float s_width, float s_height) {
 	int tMem = rowCount * colCount * sizeof(unsigned char);
 	furnitureMask_initial = (unsigned char *)malloc(tMem);
 	memset(furnitureMask_initial, (unsigned char)0, colCount*rowCount);
-	furnitureMask = (unsigned char* )malloc(tMem);
-	memset(furnitureMask,(unsigned char)0 , colCount*rowCount);
-	// cout<<int(furnitureMask[100])<<"asdfasdf"<<endl;
 }
 void Room::add_a_wall(vector<float> params){
 	wall newWall;
@@ -236,90 +233,14 @@ void Room::set_obj_zrotation(singleObj * obj, float nrot) {
 	obj->boundingBox.width = maxx-minx; obj->boundingBox.height = maxy-miny;
 }
 
-void Room::update_mask_by_object(const singleObj* obj, unsigned char * target, float movex, float movey){
-}
 
-
-// 	float get_single_obj_maskArea(vector<Vec2f> vertices) {
-// 		vector<vector<Point>> contours;
-// 		vector<Point> contour;
-// 		for (int n = 0; n < 4; n++)
-// 			contour.push_back(card_to_graph_point(vertices[n][0], vertices[n][1]));
-// 		contours.push_back(contour);
-// 		Mat_<uchar> canvas = Mat::zeros(half_height*2, half_width*2, CV_8UC1);
-// 		drawContours(canvas, contours, -1, 1, FILLED, 8);
-// 		return cv::sum(canvas)[0];
-// 	}
-
-
-// 	void update_mask_by_object(const singleObj* obj, Mat_<uchar> & target, float movex = -1, float movey=-1) {
-// 		vector<Point> contour;
-// 		vector<vector<Point>> contours;
-// 		for (int i = 0; i < 4; i++)
-// 			contour.push_back(card_to_graph_point(obj->vertices[i][0], obj->vertices[i][1]));
-// 		contours.push_back(contour);
-// 		if (movex != -1) {
-// 			drawContours(target, contours, 0, 0, FILLED, 8);
-// 			vector<Point> contour2;
-// 			for (int i = 0; i < 4; i++)
-// 				contour2.push_back(card_to_graph_point(movex + obj->vertices[i][0], movey + obj->vertices[i][1]));
-// 			contours.push_back(contour2);
-// 			drawContours(target, contours, 1, 1, FILLED, 8);
-// 		}
-// 		else
-// 			drawContours(target, contours,-1, 1, FILLED, 8);
-// 	}
-
-// 	float * get_objs_TransAndRot(){
-// 		int FloatSize = sizeof(float);
-// 		int singleItemSize = 4 * FloatSize;
-// 		float * res = (float *)malloc(objctNum * singleItemSize);
-// 		for (int i = 0; i < objctNum; i++){
-// 			int startPos = i*singleItemSize;
-// 			res[startPos] = objects[i].translation[0];
-// 			res[startPos +   FloatSize] = objects[i].translation[1];
-// 			res[startPos + 2*FloatSize] = objects[i].translation[2];
-// 			res[startPos + 3*FloatSize] = objects[i].zrotation;
-// 		}
-// 		return res;
-// 	}
-
-
-//
-
-
-
-//
-// 	void add_an_obstacle(vector<float> vertices) {
-// 		vector<Point> contour;
-// 		vector<vector<Point>> contours;
-//
-// 		for (int i = 0; i < 4; i++)
-// 			contour.push_back(card_to_graph_point(vertices[2 * i], vertices[2 * i + 1]));
-// 		contours.push_back(contour);
-// 		drawContours(furnitureMask_initial, contours, -1, 1, FILLED, 8);
-// 		obstacleArea = cv::sum(furnitureMask_initial)[0];
-// 		//cout << "obstacleArea:  " << obstacleArea<<endl;
-// 		obstacles.push_back(vertices);
-// 	}
-
-
-//
-// 	void update_furniture_mask() {
-// 		furnitureMask = furnitureMask_initial.clone();
-// 		float test1 = cv::sum(furnitureMask)[0];
-// 		vector<vector<Point>> contours;
-// 		for (int i = 0; i < objctNum; i++) {
-// 			singleObj * obj = &objects[i];
-// 			vector<Point> contour;
-// 			for (int n = 0; n < 4; n++)
-// 				contour.push_back(card_to_graph_point(obj->vertices[n][0], obj->vertices[n][1]));
-// 			contours.push_back(contour);
-// 		}
-// 		//drawContours(furnitureMask, contours, 0, 1, FILLED, 8);
-// 		drawContours(furnitureMask, contours, -1, 1, FILLED, 8);
-// 		float test = cv::sum(furnitureMask)[0];
-// 	}
+	void Room::add_an_obstacle(vector<float> params) {
+		obstacles.push_back(params);
+	}
+	void Room::get_obstacle_vertices(float * vertices){
+		for(int i=0; i<obstacles.size();i++)
+			copy(obstacles[i].begin(), obstacles[i].end(),&vertices[8*i]);
+	}
 // 	void change_obj_freeState(singleObj* obj) {
 // 		if (obj->isFixed)
 // 			freeObjIds.erase(remove(freeObjIds.begin(), freeObjIds.end(), obj->id));
