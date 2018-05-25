@@ -63,10 +63,10 @@ void random_along_wall(sharedRoom * room, singleObj * obj){
     float mwidth, mheight;
     if(get_int_random(2)==0){
         mwidth = obj->objWidth; mheight = obj->objHeight;
-        set_obj_zrotation(obj, swall->zrotation);
+        set_obj_zrotation(obj, 0);
     }else{
         mwidth = obj->objHeight; mheight = obj->objWidth;
-        set_obj_zrotation(obj, PI/2-swall->zrotation);
+        set_obj_zrotation(obj, PI/2);
     }
 
     float width_ran = swall->width - mwidth, height_ran =swall->width-mheight;
@@ -78,7 +78,7 @@ void random_along_wall(sharedRoom * room, singleObj * obj){
     }
     else if(fabsf(swall->a) < 0.01){
         rw = min(swall->vertices[0], swall->vertices[2]) + get_float_random(width_ran) + obj->boundingBox.width/2;
-        set_obj_translation(room, obj, rw,swall->translation[1] + mp*(mheight/2+0.01) );
+        set_obj_translation(room, obj, rw, swall->translation[1] + mp*(mheight/2+0.01) );
     }
     else{
         //TODO:
