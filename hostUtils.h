@@ -20,12 +20,12 @@ void setupDebugRoom(Room* room){
     room->add_a_wall(vector<float>(wallParam2,wallParam2 + 4));
     room->add_a_wall(vector<float>(wallParam3,wallParam3 + 4));
     room->add_a_wall(vector<float>(wallParam4,wallParam4 + 4));
-    room->add_an_object(vector<float>(objParam,objParam + 7));
+    room->add_an_object(vector<float>(objParam,objParam + 7), false,true);
     room->add_an_object(vector<float>(objParam,objParam + 7));
     room->add_an_object(vector<float>(bedParam,bedParam + 7));
     room->add_an_object(vector<float>(deskParam,deskParam + 7));
     room->add_a_focal_point(vector<float>(fpParam,fpParam + 3));
-    room->add_an_obstacle(vector<float>(obsParam,obsParam + 8));
+    // room->add_an_obstacle(vector<float>(obsParam,obsParam + 8));
     room->objects[1].adjoinWall = true;
     for(int i=0;i<11;i++)
         weights[i] = mWeights[i];

@@ -123,6 +123,7 @@ void Room::CopyToSharedRoom(sharedRoom *m_room){
 	m_room->objctNum = objctNum;
 	m_room->wallNum = wallNum;
 	m_room->obstacleNum = obstacles.size();
+	m_room->freeObjNum = freeObjNum;
 	m_room->half_width = half_width;
 	m_room->half_height = half_height;
 	m_room->indepenFurArea = indepenFurArea;
@@ -135,7 +136,8 @@ void Room::CopyToSharedRoom(sharedRoom *m_room){
 	m_room->pairNum = actualPairs.size();
 	m_room->groupNum = groupNum;
 	m_room->RoomCenter[0] = center[0];m_room->RoomCenter[1] = center[1];m_room->RoomCenter[2] = center[2];
-	// cudaMemcpy(m_room->freeObjIds, freeObjIds, freeObjNum* sizeof(int), cudaMemcpyHostToDevice);
+
+	cudaMemcpy(m_room->freeObjIds, freeObjIds, freeObjNum* sizeof(int), cudaMemcpyHostToDevice);
 	cudaMemcpy(m_room->groupMap, groupMap, MAX_GROUP_ALLOW* sizeof(groupMapStruct), cudaMemcpyHostToDevice);
 	cudaMemcpy(m_room->pairMap, pairMap, CONSTRAIN_PAIRS* sizeof(pairMapStruct), cudaMemcpyHostToDevice);
 	for(int i=0;i<wallNum;i++)

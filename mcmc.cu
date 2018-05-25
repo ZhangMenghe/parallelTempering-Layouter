@@ -270,7 +270,7 @@ void Metropolis_Hastings(float* costList, float* temparature, int*pickedupIds){
         __syncthreads();
 
         if(threadIdx.x == 0){
-            pickedupIds[blockIdx.x] = get_int_random(room->objctNum);
+            pickedupIds[blockIdx.x] = room->freeObjIds[get_int_random(room->freeObjNum)];
             // printf("block: %d pickup: %d\n",blockIdx.x, pickedId );
         }
 
@@ -329,8 +329,6 @@ void Initialize_Room_In_Device(sharedRoom* room, unsigned char* initialMask,floa
     __syncthreads();
 
     sumUpMask(room, initialMask, tmpSlot, &room->obstacleArea, nThreads);
-    if(threadIdx.x == 0)
-        printf("area: %f\n",room->obstacleArea );
 }
 __global__
 void Do_Metropolis_Hastings(sharedWrapper *gWrapper, float * gArray){
@@ -356,7 +354,7 @@ void Do_Metropolis_Hastings(sharedWrapper *gWrapper, float * gArray){
 
     temparature[blockIdx.x] = get_float_random(10)/100;
     for(int i=threadIdx.x; i<gWrapper->nTimes; i+=nThreads)
-        pickedupIds[i] = get_int_random(sWrapper[0].wRoom->objctNum);
+        pickedupIds[i] = sWrapper[0].wRoom->freeObjIds[get_int_random(sWrapper[0].wRoom->freeObjNum)];
 
 
     Metropolis_Hastings(costList, temparature, pickedupIds);

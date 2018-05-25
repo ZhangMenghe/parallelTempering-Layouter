@@ -59,11 +59,12 @@ struct wall{
 	float vertices[4];
 };
 struct sharedRoom{
-	int objctNum, wallNum, obstacleNum;
+	int objctNum, wallNum, obstacleNum, freeObjNum;
 	float half_width, half_height;
 	float indepenFurArea, obstacleArea, wallArea;
 	float overlappingThreshold;
 	float RoomCenter[3];
+	int freeObjIds[MAX_NUM_OBJS];
 	int colCount, rowCount, mskCount;
 	int pairNum, groupNum;
 	groupMapStruct groupMap[MAX_GROUP_ALLOW];
