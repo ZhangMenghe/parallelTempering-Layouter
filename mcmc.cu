@@ -107,6 +107,7 @@ void initial_assignment(sharedRoom* room, singleObj * objs,
         }
     }
     memcpy(mask, initialMask, room->mskCount*sizeof(unsigned char));
+
     //all threads to do update masks
     for (int i = 0; i < room->objctNum; i++) {
         mRect2f rect = get_circulate_boundingbox(room, &objs[i].boundingBox);
@@ -331,10 +332,13 @@ void Initialize_Room_In_Device(sharedRoom* room, singleObj* objs, unsigned char*
     sumUpMask(room, initialMask, tmpSlot, &room->obstacleArea, nThreads);
     __syncthreads();
 
-    for(int i=0; i<room->freeObjNum; i++){
-        draw_objMask_patch(room, &objs[room->freeObjIds[i]], tmpSlot, threadIdx.x, nThreads);
-        draw_patch_on_union_mask(initialMask, &objs[room->freeObjIds[i]], room->rowCount/2, room->colCount, threadIdx.x, nThreads);
+    for(int i=0; i<room->objctNum; i++){
+        if(objs[i].isFixed){
+            draw_objMask_patch(room, &objs[i], tmpSlot, threadIdx.x, nThreads);
+            draw_patch_on_union_mask(initialMask, &objs[i], room->rowCount/2, room->colCount, threadIdx.x, nThreads);
+        }
     }
+
     //tackle with oblique wall
     /*for(int i=0; i<room->wallNum; i++){
         wall* cwall = &room->deviceWalls[i];

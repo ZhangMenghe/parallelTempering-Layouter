@@ -63,7 +63,7 @@ __device__
 void update_mask_by_boundingBox(unsigned char* mask, mRect2f boundingBox, int halfRowNum, int colNum, int absThreadIdx, int threadStride, int addition = 1){
     for(int y = boundingBox.y - absThreadIdx; y > boundingBox.y - boundingBox.height; y -= threadStride){
         for(int x=boundingBox.x; x<boundingBox.x + boundingBox.width; x++)
-            mask[(halfRowNum - y) *colNum  + x] = 1;
+            mask[(halfRowNum - y) *colNum  + x + int(colNum/2)] = 1;
     }
 }
 __device__
@@ -94,7 +94,7 @@ void draw_patch_on_union_mask(unsigned char * mask, singleObj * obj, int halfRow
     int pos;
     for(int y=absThreadIdx; y<obj->boundingBox.height;y+=threadStride)
         for(int x=0; x<obj->boundingBox.width; x++){
-            pos = (basey + y)* colNum + obj->boundingBox.x + x;
+            pos = (basey + y)* colNum + obj->boundingBox.x + x + int(colNum/2);
             mask[pos] = obj->objMask[y*obj->maskLen + x];
         }
 }
@@ -113,7 +113,7 @@ void update_mask_by_object(unsigned char* mask, float* tmpSlot, float * vertices
             else{
                 int endIndx = binary_search_Inside_Point(x, boundX - 1, 0, y, tmpSlot, vertices);
                 while(x <= endIndx){
-                    tmpPos = (halfRowNum - y) *colNum  + x;
+                    tmpPos = (halfRowNum - y) *colNum  + x + int(colNum/2);
                     if(addition == 1)
                         mask[tmpPos] = 1;
                     else
