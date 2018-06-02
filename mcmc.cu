@@ -60,6 +60,7 @@ void changeTemparature(float * temparature){
 __device__
 void random_along_wall(sharedRoom * room, singleObj * obj){
     wall * swall = &room->deviceWalls[get_int_random(room->wallNum)];
+    //wall * swall = &room->deviceWalls[4];
     float mwidth, mheight;
     if(get_int_random(2)==0){
         mwidth = obj->objWidth; mheight = obj->objHeight;
@@ -81,8 +82,18 @@ void random_along_wall(sharedRoom * room, singleObj * obj){
         set_obj_translation(room, obj, rw, swall->translation[1] + mp*(mheight/2+0.01) );
     }
     else{
-        //TODO:
-        printf("CANNOT ACCEPT OBLIQUE WALL\n");
+        rw = swall->vertices[0] + get_float_random(width_ran) + mwidth/2;
+        float y = (-swall->c - swall->a * rw) / swall->b;
+        float tk = swall->b/swall->a, tb = y-tk * rw;
+        float axbyc = mwidth / 2 * sqrtf(swall->a * swall->a + swall->b * swall->b);
+        float tx = (axbyc - swall->c - swall->b * tb) / (swall->a + swall->b * tk);
+        float ty = tk * tx + tb;
+        if(ty > room->half_height || ty<-room->half_height){
+            tx = -tx; ty = tk*tx + tb;
+        }
+        //if(set_obj_translation(room, obj, tx, ty))
+        //    printf("%f, %f\n", obj->translation[0], obj->translation[1]);
+        set_obj_zrotation(obj, swall->zrotation);
     }
 }
 
@@ -528,9 +539,11 @@ int main(int argc, char** argv){
 	//existance_file = new char[100];
 	//int r = strcpy_s(filename, 100, "E:/layoutParam.txt");
 	//r = strcpy_s(existance_file, 100, "E:/fixedObj.txt");
-	Room* parserRoom = new Room();
-    setupDebugRoom(parserRoom);
-
+	//Room* parserRoom = new Room();
+    //setupDebugRoom(parserRoom);
+    string rawString = "r : 400,300 \n w : -200, 150, 200, 150 \nw:-200, -150, -200, 150\nw:200, -150, 200, 150\nw:-200, -150, 200, -150\nf:0, 0, 100, 200, 0, 4, 10";//\n p : 0, 150, 0\nf:0, 0, 100, 200, 0, 4, 10\nf:0, 0, 50, 50, 0, 0, 10";
+    Room* parserRoom = new Room();
+    parser_customer_input_string(rawString, parserRoom);
 	// parser_inputfile(filename, parserRoom);
 	// parser_inputfile(existance_file, room, weights);
 	// if (parserRoom != nullptr && (parserRoom->objctNum != 0 || parserRoom->wallNum != 0))

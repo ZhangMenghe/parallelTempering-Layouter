@@ -34,7 +34,7 @@ void Room::init_a_wall(wall *newWall, vector<float> params) {
 	}
 	else {
 		newWall->a = (by - ay) / (bx - ax); newWall->b = -1; newWall->c = -(newWall->a*ax - ay);
-		newWall->zrotation = atanf(newWall->a)/ PI;
+		newWall->zrotation = (atanf(newWall->a) < 0)? PI/2-atanf(newWall->a): atanf(newWall->a);
 	}
 }
 // 4*2 vertices, 2 center, 2 size, angle, label, zheight

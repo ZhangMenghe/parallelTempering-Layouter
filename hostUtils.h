@@ -3,11 +3,17 @@
 #include "room.cuh"
 
 __device__ __managed__ float weights[11]={1.0f};
+
 void setupDebugRoom(Room* room){
-    float wallParam1[] = {-200, 150, 200, 150};
-    float wallParam2[] = {-200, -150, 200, -150};
-    float wallParam3[] = {-200, -150, -200, 150};
-    float wallParam4[] = {200, -150, 200, 150};
+    // float wallParam1[] = {-200, 150, 200, 150};
+    // float wallParam2[] = {200, -150, 200, 150};
+    float wallParam3[] = {-200, -150, 200, -150};
+    float wallParam4[] = {-200, -150, -200, 150};
+
+    float wallParam1[] = {-200, 150, 0, 150};//up
+    float wallParam2[] = {200, -150, 200, 0};
+    float wallParam5[] = {0, 150, 200, 0};
+
     float objParam[] = {0, 0, 50, 50, 0, 0, 10};
     float bedParam[] = {0, 0, 100, 200, 0, 4, 10};
     float deskParam[] = {0, 0, 40, 100, 0, 7, 10};
@@ -20,13 +26,16 @@ void setupDebugRoom(Room* room){
     room->add_a_wall(vector<float>(wallParam2,wallParam2 + 4));
     room->add_a_wall(vector<float>(wallParam3,wallParam3 + 4));
     room->add_a_wall(vector<float>(wallParam4,wallParam4 + 4));
-    room->add_an_object(vector<float>(objParam,objParam + 7), false,true);
-    room->add_an_object(vector<float>(objParam,objParam + 7));
+    room->add_a_wall(vector<float>(wallParam5,wallParam5 + 4));
+
+    // room->add_an_object(vector<float>(objParam,objParam + 7));
+    // room->add_an_object(vector<float>(objParam,objParam + 7),false,true);
     room->add_an_object(vector<float>(bedParam,bedParam + 7));
-    room->add_an_object(vector<float>(deskParam,deskParam + 7));
+    // room->add_an_object(vector<float>(deskParam,deskParam + 7));
+
     room->add_a_focal_point(vector<float>(fpParam,fpParam + 3));
     // room->add_an_obstacle(vector<float>(obsParam,obsParam + 8));
-    room->objects[1].adjoinWall = true;
+
     for(int i=0;i<11;i++)
         weights[i] = mWeights[i];
     for(int i=0; i< room->objctNum-1; i++){
@@ -34,6 +43,54 @@ void setupDebugRoom(Room* room){
             room->set_objs_pairwise_relation(room->objects[i], room->objects[j]);
     }
 
+}
+void process_one_object(Room * room, char * line, char * context) {
+	char delims[] = " :,\t";
+	char * token = strtok_s(line, delims, &context);
+	int cateType = token[0];
+	vector<float> params;
+	for(token = strtok_s(nullptr, delims, &context); token!=nullptr; token = strtok_s(nullptr, delims, &context))
+		params.push_back(atof(token));
+	switch (cateType)
+	{
+	case 'r':
+		room->initialize_room(params[0], params[1]);
+		break;
+	case 'w':
+		room->add_a_wall(params);
+		break;
+	case 'f':
+		room->add_an_object(params);
+		break;
+    case 'o':
+        room->add_an_obstacle(params);
+        break;
+	case 'p':
+		room->add_a_focal_point(params);
+		break;
+	default:
+		break;
+	}
+}
+void parser_customer_input_string(string rawString, Room * room) {
+	if (!rawString.length())
+		return;
+    float mWeights[] = {1.0f, 0.01f, 0.01f, 0.1f, 1.0f, 1.0f, 1.0f, 0.001f, 0.01f, 1.0f, 2.0f};
+	char * context = nullptr;
+	char * charline = new char[MAX_INPUT_LENGTH];
+	int r = strcpy_s(charline, MAX_INPUT_LENGTH, rawString.c_str());
+	vector<float> param;
+	char * line = strtok_s(charline, "\n", &context);
+	while (line != nullptr) {
+		process_one_object(room, line, context);
+		line = strtok_s(nullptr, "\n", &context);
+	}
+    for(int i=0;i<11;i++)
+        weights[i] = mWeights[i];
+    for(int i=0; i< room->objctNum-1; i++){
+        for(int j=i+1; j<room->objctNum; j++)
+            room->set_objs_pairwise_relation(room->objects[i], room->objects[j]);
+    }
 }
 void parser_inputfile(const char* filename, Room * parser_inputfile) {
 	ifstream instream(filename);
